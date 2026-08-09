@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fraglich Test – Fragmi</title>
+<style>
+    :root {
+        --bg: #1a1a2e;
+        --panel: #252542;
+        --accent: #7b5cff;
+        --accent2: #00d4ff;
+        --text: #f0f0ff;
+        --muted: #a0a0c0;
+        --green: #3fb950;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        min-height: 100vh;
+        background: linear-gradient(160deg, #0f0f23, #1a1a2e);
+        color: var(--text);
+        font-family: system-ui, "Segoe UI", sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+    }
+    h1 {
+        font-size: 2rem;
+        margin: 20px 0 6px;
+        background: linear-gradient(90deg, var(--accent2), var(--accent));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        text-align: center;
+    }
+    .sub {
+        color: var(--muted);
+        margin-bottom: 24px;
+        text-align: center;
+        font-size: 0.95rem;
+    }
+    .card {
+        background: var(--panel);
+        border: 1px solid rgba(123,92,255,.35);
+        border-radius: 16px;
+        padding: 22px;
+        width: 100%;
+        max-width: 520px;
+        box-shadow: 0 8px 30px rgba(0,0,0,.4);
+    }
+    label {
+        display: block;
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin-bottom: 6px;
+    }
+    .keyrow {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+    input[type="password"], input[type="text"] {
+        flex: 1;
+        padding: 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(123,92,255,.4);
+        background: #1a1a30;
+        color: var(--text);
+        font-size: 0.95rem;
+    }
+    input:focus { outline: none; border-color: var(--accent2); }
+    .btn {
+        padding: 12px 18px;
+        border: none;
+        border-radius: 10px;
+        background: linear-gradient(90deg, var(--accent), var(--accent2));
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .btn:hover { filter: brightness(1.15); }
+    .hint {
+        font-size: 0.78rem;
+        color: var(--muted);
+        margin-top: 6px;
+        line-height: 1.5;
+    }
+    .wisp-area {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 30px 0 10px;
+    }
+    #wispBtn {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        border: 3px solid var(--accent);
+        background: radial-gradient(circle at 35% 30%, #3a3a6e, #1a1a30);
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: transform .2s, box-shadow .2s;
+        box-shadow: 0 0 25px rgba(123,92,255,.35);
+    }
+    #wispBtn:hover { transform: scale(1.05); }
+    #wispBtn.listening {
+        border-color: var(--accent2);
+        box-shadow: 0 0 45px rgba(0,212,255,.7);
+        animation: pulse 1.2s infinite;
+    }
+    #wispBtn.thinking {
+        border-color: #ffd166;
+        box-shadow: 0 0 45px rgba(255,209,102,.6);
+    }
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.08); }
+    }
+    #wispIcon { font-size: 3rem; }
+    #wispLabel {
+        font-size: 0.75rem;
+        letter-spacing: 2px;
+        color: var(--muted);
+        font-weight: 700;
+    }
+    #statusText {
+        margin-top: 22px;
+        min-height: 70px;
+        width: 100%;
+        background: #1a1a30;
+        border: 1px solid rgba(123,92,255,.25);
+        border-radius: 12px;
+        padding: 16px;
+        font-size: 0.95rem;
+        line-height: 1.6;
+        text-align: center;
+    }
+    footer {
+        margin-top: 26px;
+        color: var(--muted);
+        font-size: 0.75rem;
+        text-align: center;
+    }
+</style>
+</head>
+<body>
+
+<h1>🧩 Fraglich Test</h1>
+<p class="sub">Fragmi – dein kleiner Puzzle-Wisp zum Fragen stellen</p>
+
+<div class="card">
+    <label for="apiKeyInput">Gemini API-Key</label>
+    <div class="keyrow">
+        <input type="password" id="apiKeyInput" placeholder="API-Key hier einfügen …">
+        <button class="btn" onclick="saveApiKey()">Speichern</button>
+    </div>
+    <p class="hint">
+        Der Key wird nur in deinem Browser gespeichert (localStorage) und nirgendwo sonst hingeschickt.
+        Kostenlosen Key gibt es bei Google AI Studio.
+    </p>
+
+    <div class="wisp-area">
+        <button id="wispBtn" onclick="toggleListening()">
+            <span id="wispIcon">🧩</span>
+            <span id="wispLabel">DRÜCKEN</span>
+        </button>
+    </div>
+
+    <div id="statusText">Hallo! Ich bin Fragmi. Trage oben deinen API-Key ein, speichere ihn – und dann drück mich und stell mir eine Frage! ✨</div>
+</div>
+
+<footer>Fraglich Test · Lokale Testseite · Kein Server nötig</footer>
+
+<script>
+    let apiKey = '';
+
+    try {
+        apiKey = localStorage.getItem('fragmi_gemini_key') || '';
+        if(apiKey) {
+            document.getElementById('apiKeyInput').value = apiKey;
+        }
+    } catch(e) {
+        console.warn("LocalStorage ist im Browser blockiert.");
+    }
+
+    let isListening = false;
+    let recognition;
+    let synth = window.speechSynthesis;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'de-DE';
+        recognition.interimResults = false;
+
+        recognition.onresult = (event) => {
+            const questionText = event.results[0][0].transcript;
+            handleUserQuestion(questionText);
+        };
+
+        recognition.onerror = (event) => {
+            updateStatus("Hoppla, das habe ich nicht verstanden. Versuch es nochmal!");
+            resetWisp();
+        };
+
+        recognition.onend = () => {
+            if(isListening) resetWisp();
+        };
+    }
+
+    function saveApiKey() {
+        const inputVal = document.getElementById('apiKeyInput').value.trim();
+        if (!inputVal) {
+            alert("Bitte gib einen gültigen API-Key ein!");
+            return;
+        }
+
+        apiKey = inputVal;
+
+        try {
+            localStorage.setItem('fragmi_gemini_key', apiKey);
+            updateStatus("✅ API-Key erfolgreich gespeichert! Klicke jetzt auf den Wisp.");
+        } catch(e) {
+            updateStatus("✅ API-Key für diese Sitzung aktiv! (Speichern im Browser blockiert)");
+        }
+    }
+
+    function toggleListening() {
+        if (!apiKey) {
+            updateStatus("⚠️ Bitte trage zuerst oben deinen API-Key ein und klicke auf Speichern!");
+            return;
+        }
+
+        if (!isListening) {
+            isListening = true;
+            const wisp = document.getElementById('wispBtn');
+            wisp.classList.add('listening');
+            document.getElementById('wispIcon').innerText = "🎙️";
+            document.getElementById('wispLabel').innerText = "ZUHÖREN...";
+            updateStatus("Ich höre dir zu...");
+
+            if (recognition) {
+                recognition.start();
+            } else {
+                const promptQuestion = prompt("Spracherkennung nicht aktiv. Deine Frage an Fragmi:");
+                if (promptQuestion) {
+                    handleUserQuestion(promptQuestion);
+                } else {
+                    resetWisp();
+                }
+            }
+        } else {
+            if (recognition) recognition.stop();
+            resetWisp();
+        }
+    }
+
+    function resetWisp() {
+        isListening = false;
+        const wisp = document.getElementById('wispBtn');
+        wisp.classList.remove('listening', 'thinking');
+        document.getElementById('wispIcon').innerText = "🧩";
+        document.getElementById('wispLabel').innerText = "DRÜCKEN";
+    }
+
+    async function handleUserQuestion(question) {
+        resetWisp();
+        const wisp = document.getElementById('wispBtn');
+        wisp.classList.add('thinking');
+        document.getElementById('wispIcon').innerText = "✨";
+        document.getElementById('wispLabel').innerText = "DENKT...";
+
+        updateStatus(`Frage: "${question}"<br><em>Fragmi sucht und denkt nach...</em>`);
+
+        const systemPrompt = `
+Du bist "Fragmi", ein kleiner leuchtender Puzzle-Wisp und Erklär-Begleiter für Kinder (4-6 Jahre).
+REGELN:
+1. ELTERN-ERST-PRINZIP: Erwähne kurz, dass Eltern die besten Ansprechpartner sind ("Hast du dazu schon Mama oder Papa gefragt?").
+2. KINDFREUNDLICHKEIT: Max. 3-4 sehr kurze Sätze in einfacher Sprache.
+3. SICHERHEIT: Bei Angst/Schmerz/Gefahr verweise sofort an die Eltern.
+        `.trim();
+
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{ text: `${systemPrompt}\n\nKind fragt: ${question}` }]
+                    }],
+                    tools: [{ googleSearch: {} }]
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.error) {
+                throw new Error(data.error.message);
+            }
+
+            let answer = data.candidates[0].content.parts[0].text;
+
+            updateStatus(`<strong>Fragmi sagt:</strong><br>${answer}`);
+            speakAnswer(answer);
+
+        } catch (err) {
+            updateStatus(`Oh je, Fehler: ${err.message || 'API-Key ungültig oder keine Verbindung!'}`);
+        } finally {
+            wisp.classList.remove('thinking');
+            document.getElementById('wispIcon').innerText = "🧩";
+            document.getElementById('wispLabel').innerText = "DRÜCKEN";
+        }
+    }
+
+    function updateStatus(text) {
+        document.getElementById('statusText').innerHTML = text;
+    }
+
+    function speakAnswer(text) {
+        if (!synth) return;
+        synth.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'de-DE';
+        utterance.pitch = 1.2;
+        utterance.rate = 0.85;
+        synth.speak(utterance);
+    }
+</script>
+
+</body>
+</html>
