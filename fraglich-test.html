@@ -192,6 +192,8 @@
     let isListening = false;
     let recognition;
     let synth = window.speechSynthesis;
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 60000; // 60 Sekunden warten bei Quota-Fehler
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -269,6 +271,35 @@
         document.getElementById('wispLabel').innerText = "DRÜCKEN";
     }
 
+    async function callGeminiWithRetry(prompt, attempt = 1) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{ text: prompt }]
+                }]
+            })
+        });
+
+        const data = await response.json();
+
+        // Quota-Fehler erkennen und retry
+        if (data.error && data.error.code === 429 && attempt < MAX_RETRIES) {
+            updateStatus(`⏳ Kurze Pause... Versuch ${attempt + 1} in ${RETRY_DELAY_MS/1000} Sekunden`);
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+            return callGeminiWithRetry(prompt, attempt + 1);
+        }
+
+        if (data.error) {
+            throw new Error(data.error.message);
+        }
+
+        return data.candidates[0].content.parts[0].text;
+    }
+
     async function handleUserQuestion(question) {
         resetWisp();
         const wisp = document.getElementById('wispBtn');
@@ -287,25 +318,7 @@ REGELN:
         `.trim();
 
         try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{ text: `${systemPrompt}\n\nKind fragt: ${question}` }]
-                    }]
-                })
-            });
-
-            const data = await response.json();
-
-            if (data.error) {
-                throw new Error(data.error.message);
-            }
-
-            let answer = data.candidates[0].content.parts[0].text;
+            const answer = await callGeminiWithRetry(`${systemPrompt}\n\nKind fragt: ${question}`);
 
             updateStatus(`<strong>Fragmi sagt:</strong><br>${answer}`);
             speakAnswer(answer);
