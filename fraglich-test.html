@@ -193,7 +193,7 @@
     let recognition;
     let synth = window.speechSynthesis;
     const MAX_RETRIES = 3;
-    const RETRY_DELAY_MS = 60000; // 60 Sekunden warten bei Quota-Fehler
+    const RETRY_DELAY_MS = 60000;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -272,7 +272,7 @@
     }
 
     async function callGeminiWithRetry(prompt, attempt = 1) {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
         const response = await fetch(url, {
             method: 'POST',
@@ -286,7 +286,6 @@
 
         const data = await response.json();
 
-        // Quota-Fehler erkennen und retry
         if (data.error && data.error.code === 429 && attempt < MAX_RETRIES) {
             updateStatus(`⏳ Kurze Pause... Versuch ${attempt + 1} in ${RETRY_DELAY_MS/1000} Sekunden`);
             await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
