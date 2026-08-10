@@ -60,7 +60,7 @@
         gap: 8px;
         margin-bottom: 8px;
     }
-    input[type="password"], input[type="text"] {
+    input[type="password"], input[type="text"], select {
         flex: 1;
         padding: 12px;
         border-radius: 10px;
@@ -69,7 +69,7 @@
         color: var(--text);
         font-size: 0.95rem;
     }
-    input:focus { outline: none; border-color: var(--accent2); }
+    input:focus, select:focus { outline: none; border-color: var(--accent2); }
     .btn {
         padding: 12px 18px;
         border: none;
@@ -86,6 +86,12 @@
         color: var(--muted);
         margin-top: 6px;
         line-height: 1.5;
+    }
+    .model-select {
+        margin-top: 12px;
+    }
+    .model-select select {
+        width: 100%;
     }
     .wisp-area {
         display: flex;
@@ -165,6 +171,21 @@
         Kostenlosen Key gibt es bei Google AI Studio.
     </p>
 
+    <div class="model-select">
+        <label for="modelSelect">Modell auswählen</label>
+        <select id="modelSelect">
+            <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp (experimentell)</option>
+            <option value="gemini-2.0-flash-thinking-exp-01-21">gemini-2.0-flash-thinking-exp</option>
+            <option value="gemini-exp-1206">gemini-exp-1206</option>
+            <option value="gemini-1.5-pro-latest">gemini-1.5-pro-latest</option>
+            <option value="gemini-1.5-flash-latest">gemini-1.5-flash-latest</option>
+            <option value="gemini-1.5-flash-8b-latest">gemini-1.5-flash-8b-latest</option>
+        </select>
+    </div>
+    <p class="hint">
+        Falls ein Modell nicht funktioniert, einfach ein anderes auswählen.
+    </p>
+
     <div class="wisp-area">
         <button id="wispBtn" onclick="toggleListening()">
             <span id="wispIcon">🧩</span>
@@ -172,7 +193,7 @@
         </button>
     </div>
 
-    <div id="statusText">Hallo! Ich bin Fragmi. Trage oben deinen API-Key ein, speichere ihn – und dann drück mich und stell mir eine Frage! ✨</div>
+    <div id="statusText">Hallo! Ich bin Fragmi. Trage oben deinen API-Key ein, wähle ein Modell – und dann drück mich und stell mir eine Frage! ✨</div>
 </div>
 
 <footer>Fraglich Test · Lokale Testseite · Kein Server nötig</footer>
@@ -184,6 +205,10 @@
         apiKey = localStorage.getItem('fragmi_gemini_key') || '';
         if(apiKey) {
             document.getElementById('apiKeyInput').value = apiKey;
+        }
+        const savedModel = localStorage.getItem('fragmi_model');
+        if(savedModel) {
+            document.getElementById('modelSelect').value = savedModel;
         }
     } catch(e) {
         console.warn("LocalStorage ist im Browser blockiert.");
@@ -215,6 +240,12 @@
             if(isListening) resetWisp();
         };
     }
+
+    document.getElementById('modelSelect').addEventListener('change', function() {
+        try {
+            localStorage.setItem('fragmi_model', this.value);
+        } catch(e) {}
+    });
 
     function saveApiKey() {
         const inputVal = document.getElementById('apiKeyInput').value.trim();
@@ -272,7 +303,8 @@
     }
 
     async function callGeminiWithRetry(prompt, attempt = 1) {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+        const model = document.getElementById('modelSelect').value;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
         const response = await fetch(url, {
             method: 'POST',
