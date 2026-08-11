@@ -299,6 +299,7 @@
     let recognition;
     let synth = window.speechSynthesis;
     let isSpeaking = false;
+    let childName = localStorage.getItem('fragmi_childname') || null;
 
     function forceUnlockSafari() {
         if (!synth) return;
@@ -336,10 +337,19 @@
         forceUnlockSafari();
         setTimeout(() => {
             synth.cancel();
-            const u = new SpeechSynthesisUtterance("Hallo! Ich bin Fragmi, dein kleiner Puzzle-Wisp! Ich freue mich so sehr, mit dir zu spielen und deine Fragen zu beantworten!");
+            // Persönliche Begrüßung: mit Name, oder nach Name fragen
+            let greeting;
+            if (childName) {
+                greeting = `Hallo ${childName}! Schön, dass du wieder da bist! Ich bin Fragmi, dein Puzzle-Wisp. Was möchtest du heute wissen?`;
+            } else {
+                greeting = "Hallo! Ich bin Fragmi, dein kleiner Puzzle-Wisp! Wie heißt du denn?";
+            }
+            const u = new SpeechSynthesisUtterance(greeting);
             applyChildVoice(u);
             synth.speak(u);
-            updateStatus("🔊 Hörst du Fragmis Kinderstimme? Dann kann es losgehen!");
+            updateStatus(childName
+                ? `🔊 Hallo ${childName}! Fragmi ist bereit für deine Fragen!`
+                : "🔊 Fragmi möchte dich kennenlernen! Sag oder tippe deinen Namen.");
         }, 100);
     }
 
@@ -410,12 +420,40 @@
         document.getElementById('wispLabel').innerText = "Drücken zum Sprechen";
     }
 
+    // Begrüßung erkennen (Hallo, Hi, Hey, Guten Tag, ...)
+    function isGreeting(text) {
+        const greetings = ['hallo', 'hi', 'hey', 'guten tag', 'guten morgen', 'guten abend', 'servus', 'moin', 'na', 'huhu', 'halo'];
+        const lower = text.toLowerCase().trim();
+        return greetings.some(g => lower.startsWith(g)) && lower.length < 30;
+    }
+
+    // Name aus Antwort extrahieren (z.B. "Ich heiße Ben" → "Ben")
+    function extractName(text) {
+        const patterns = [
+            /ich hei(?:s|ß)e?\s+([a-zäöü]+)/i,
+            /mein name ist\s+([a-zäöü]+)/i,
+            /ich bin\s+([a-zäöü]+)/i,
+            /^([a-zäöü]+)$/i  // nur ein Wort = wahrscheinlich der Name
+        ];
+        for (const p of patterns) {
+            const m = text.trim().match(p);
+            if (m) {
+                const name = m[1].toLowerCase();
+                // keine Begrüßungen oder Füllwörter als Name akzeptieren
+                const blocked = ['hallo', 'hi', 'hey', 'gut', 'danke', 'bitte', 'ja', 'nein', 'okay', 'fragmi'];
+                if (!blocked.includes(name) && name.length > 1 && name.length < 20) {
+                    return name.charAt(0).toUpperCase() + name.slice(1);
+                }
+            }
+        }
+        return null;
+    }
+
     async function handleUserQuestion(question) {
         resetWisp();
         const container = document.getElementById('wispBtn');
         container.className = "wisp-stage thinking";
         document.getElementById('wispLabel').innerText = "Denkt nach...";
-
         updateStatus(`<em>Fragmi denkt nach...</em>`);
 
         if (synth) {
@@ -424,7 +462,38 @@
             synth.speak(dummy);
         }
 
+        // 1. Name extrahieren? (wenn Kind seinen Namen sagt)
+        const possibleName = extractName(question);
+        if (possibleName && !childName) {
+            childName = possibleName;
+            localStorage.setItem('fragmi_childname', childName);
+            const answer = `Hallo ${childName}! Was für ein schöner Name! Schön, dass du da bist, ${childName}! Hast du eine Frage an mich? Ich erkläre dir alles, was du wissen möchtest!`;
+            updateStatus(answer);
+            speakAnswerSafari(answer);
+            return;
+        }
+
+        // 2. Begrüßung? → Freundlich zurückgrüßen (UND nach Name fragen falls unbekannt)
+        if (isGreeting(question)) {
+            let answer;
+            if (childName) {
+                answer = `Hallo ${childName}! Schön, dich zu sehen! Was möchtest du heute wissen? Stell mir einfach eine Frage!`;
+            } else {
+                answer = "Hallo! Schön, dass du da bist! Wie heißt du denn? Sag mir deinen Namen, damit wir Freunde werden können!";
+            }
+            updateStatus(answer);
+            speakAnswerSafari(answer);
+            return;
+        }
+
+        // 3. Normale Frage → an KI schicken (mit persönlichem Namen)
+        const nameContext = childName
+            ? `Das Kind heißt ${childName}. Sprich es manchmal persönlich mit seinem Namen an.`
+            : `Du kennst den Namen des Kindes noch nicht. Wenn es passt, frage freundlich nach dem Namen.`;
+
         const systemPrompt = `Du bist "Fragmi", ein freundlicher, leuchtender Puzzle-Wisp und Erklär-Begleiter für Kinder (4-6 Jahre).
+
+${nameContext}
 
 DEINE AUFGABE:
 Erkläre die Frage DIREKT, AUSFÜHRLICH und PERFEKT – so, dass ein 4-6-jähriges Kind es versteht und etwas lernt.
