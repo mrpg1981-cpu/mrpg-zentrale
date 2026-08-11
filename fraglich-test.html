@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fraglich Test – Fragmi</title>
+<title>Fraglich – Fragmi</title>
+<script src="https://js.puter.com/v2/"></script>
 <style>
     :root {
         --bg: #1a1a2e;
@@ -12,7 +13,6 @@
         --accent2: #00d4ff;
         --text: #f0f0ff;
         --muted: #a0a0c0;
-        --green: #3fb950;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -49,55 +49,22 @@
         max-width: 520px;
         box-shadow: 0 8px 30px rgba(0,0,0,.4);
     }
-    label {
-        display: block;
-        font-size: 0.85rem;
-        color: var(--muted);
-        margin-bottom: 6px;
-    }
-    .keyrow {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 8px;
-    }
-    input[type="password"], input[type="text"], select {
-        flex: 1;
-        padding: 12px;
-        border-radius: 10px;
-        border: 1px solid rgba(123,92,255,.4);
-        background: #1a1a30;
-        color: var(--text);
-        font-size: 0.95rem;
-    }
-    input:focus, select:focus { outline: none; border-color: var(--accent2); }
-    .btn {
-        padding: 12px 18px;
-        border: none;
-        border-radius: 10px;
-        background: linear-gradient(90deg, var(--accent), var(--accent2));
-        color: #fff;
+    .badge {
+        display: inline-block;
+        background: rgba(63,185,80,.15);
+        border: 1px solid #3fb950;
+        color: #3fb950;
+        border-radius: 99px;
+        padding: 6px 14px;
+        font-size: 0.8rem;
         font-weight: 700;
-        cursor: pointer;
-        white-space: nowrap;
-    }
-    .btn:hover { filter: brightness(1.15); }
-    .hint {
-        font-size: 0.78rem;
-        color: var(--muted);
-        margin-top: 6px;
-        line-height: 1.5;
-    }
-    .model-select {
-        margin-top: 12px;
-    }
-    .model-select select {
-        width: 100%;
+        margin-bottom: 8px;
     }
     .wisp-area {
         display: flex;
         flex-direction: column;
         align-items: center;
-        margin: 30px 0 10px;
+        margin: 24px 0 10px;
     }
     #wispBtn {
         width: 150px;
@@ -135,6 +102,32 @@
         color: var(--muted);
         font-weight: 700;
     }
+    .textrow {
+        display: flex;
+        gap: 8px;
+        margin-top: 16px;
+    }
+    input[type="text"] {
+        flex: 1;
+        padding: 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(123,92,255,.4);
+        background: #1a1a30;
+        color: var(--text);
+        font-size: 1rem;
+    }
+    input:focus { outline: none; border-color: var(--accent2); }
+    .btn {
+        padding: 12px 18px;
+        border: none;
+        border-radius: 10px;
+        background: linear-gradient(90deg, var(--accent), var(--accent2));
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .btn:hover { filter: brightness(1.15); }
     #statusText {
         margin-top: 22px;
         min-height: 70px;
@@ -157,34 +150,13 @@
 </head>
 <body>
 
-<h1>🧩 Fraglich Test</h1>
+<h1>🧩 Fraglich</h1>
 <p class="sub">Fragmi – dein kleiner Puzzle-Wisp zum Fragen stellen</p>
 
 <div class="card">
-    <label for="apiKeyInput">Gemini API-Key</label>
-    <div class="keyrow">
-        <input type="password" id="apiKeyInput" placeholder="API-Key hier einfügen …">
-        <button class="btn" onclick="saveApiKey()">Speichern</button>
+    <div style="text-align:center">
+        <span class="badge">✅ Kein API-Key nötig – einfach loslegen!</span>
     </div>
-    <p class="hint">
-        Der Key wird nur in deinem Browser gespeichert (localStorage) und nirgendwo sonst hingeschickt.
-        Kostenlosen Key gibt es bei Google AI Studio.
-    </p>
-
-    <div class="model-select">
-        <label for="modelSelect">Modell auswählen</label>
-        <select id="modelSelect">
-            <option value="gemini-2.5-flash" selected>gemini-2.5-flash (empfohlen)</option>
-            <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-            <option value="gemini-2.5-flash-preview-05-20">gemini-2.5-flash-preview</option>
-            <option value="gemini-2.5-pro-preview-05-06">gemini-2.5-pro-preview</option>
-            <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp</option>
-            <option value="gemini-1.5-pro-latest">gemini-1.5-pro-latest</option>
-        </select>
-    </div>
-    <p class="hint">
-        Falls ein Modell nicht funktioniert, einfach ein anderes auswählen.
-    </p>
 
     <div class="wisp-area">
         <button id="wispBtn" onclick="toggleListening()">
@@ -193,32 +165,20 @@
         </button>
     </div>
 
-    <div id="statusText">Hallo! Ich bin Fragmi. Trage oben deinen API-Key ein, wähle ein Modell – und dann drück mich und stell mir eine Frage! ✨</div>
+    <div class="textrow">
+        <input type="text" id="questionInput" placeholder="Oder tippe deine Frage hier …" onkeydown="if(event.key==='Enter')askTyped()">
+        <button class="btn" onclick="askTyped()">Fragen</button>
+    </div>
+
+    <div id="statusText">Hallo! Ich bin Fragmi. Drück mich und stell mir eine Frage – oder tippe sie einfach unten ein! ✨</div>
 </div>
 
-<footer>Fraglich Test · Lokale Testseite · Kein Server nötig</footer>
+<footer>Fraglich · Kostenlos via Puter.js · Kein Key, kein Server nötig</footer>
 
 <script>
-    let apiKey = '';
-
-    try {
-        apiKey = localStorage.getItem('fragmi_gemini_key') || '';
-        if(apiKey) {
-            document.getElementById('apiKeyInput').value = apiKey;
-        }
-        const savedModel = localStorage.getItem('fragmi_model');
-        if(savedModel) {
-            document.getElementById('modelSelect').value = savedModel;
-        }
-    } catch(e) {
-        console.warn("LocalStorage ist im Browser blockiert.");
-    }
-
     let isListening = false;
     let recognition;
     let synth = window.speechSynthesis;
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY_MS = 60000;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -231,8 +191,8 @@
             handleUserQuestion(questionText);
         };
 
-        recognition.onerror = (event) => {
-            updateStatus("Hoppla, das habe ich nicht verstanden. Versuch es nochmal!");
+        recognition.onerror = () => {
+            updateStatus("Hoppla, das habe ich nicht verstanden. Versuch es nochmal – oder tippe deine Frage ein!");
             resetWisp();
         };
 
@@ -241,35 +201,7 @@
         };
     }
 
-    document.getElementById('modelSelect').addEventListener('change', function() {
-        try {
-            localStorage.setItem('fragmi_model', this.value);
-        } catch(e) {}
-    });
-
-    function saveApiKey() {
-        const inputVal = document.getElementById('apiKeyInput').value.trim();
-        if (!inputVal) {
-            alert("Bitte gib einen gültigen API-Key ein!");
-            return;
-        }
-
-        apiKey = inputVal;
-
-        try {
-            localStorage.setItem('fragmi_gemini_key', apiKey);
-            updateStatus("✅ API-Key erfolgreich gespeichert! Klicke jetzt auf den Wisp.");
-        } catch(e) {
-            updateStatus("✅ API-Key für diese Sitzung aktiv! (Speichern im Browser blockiert)");
-        }
-    }
-
     function toggleListening() {
-        if (!apiKey) {
-            updateStatus("⚠️ Bitte trage zuerst oben deinen API-Key ein und klicke auf Speichern!");
-            return;
-        }
-
         if (!isListening) {
             isListening = true;
             const wisp = document.getElementById('wispBtn');
@@ -281,17 +213,21 @@
             if (recognition) {
                 recognition.start();
             } else {
-                const promptQuestion = prompt("Spracherkennung nicht aktiv. Deine Frage an Fragmi:");
-                if (promptQuestion) {
-                    handleUserQuestion(promptQuestion);
-                } else {
-                    resetWisp();
-                }
+                resetWisp();
+                document.getElementById('questionInput').focus();
+                updateStatus("Spracheingabe geht hier nicht – tippe deine Frage einfach unten ein! ⌨️");
             }
         } else {
             if (recognition) recognition.stop();
             resetWisp();
         }
+    }
+
+    function askTyped() {
+        const q = document.getElementById('questionInput').value.trim();
+        if (!q) return;
+        document.getElementById('questionInput').value = '';
+        handleUserQuestion(q);
     }
 
     function resetWisp() {
@@ -302,35 +238,6 @@
         document.getElementById('wispLabel').innerText = "DRÜCKEN";
     }
 
-    async function callGeminiWithRetry(prompt, attempt = 1) {
-        const model = document.getElementById('modelSelect').value;
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [{ text: prompt }]
-                }]
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.error && data.error.code === 429 && attempt < MAX_RETRIES) {
-            updateStatus(`⏳ Kurze Pause... Versuch ${attempt + 1} in ${RETRY_DELAY_MS/1000} Sekunden`);
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
-            return callGeminiWithRetry(prompt, attempt + 1);
-        }
-
-        if (data.error) {
-            throw new Error(data.error.message);
-        }
-
-        return data.candidates[0].content.parts[0].text;
-    }
-
     async function handleUserQuestion(question) {
         resetWisp();
         const wisp = document.getElementById('wispBtn');
@@ -338,24 +245,27 @@
         document.getElementById('wispIcon').innerText = "✨";
         document.getElementById('wispLabel').innerText = "DENKT...";
 
-        updateStatus(`Frage: "${question}"<br><em>Fragmi sucht und denkt nach...</em>`);
+        updateStatus(`Frage: "${question}"<br><em>Fragmi denkt nach...</em>`);
 
-        const systemPrompt = `
-Du bist "Fragmi", ein kleiner leuchtender Puzzle-Wisp und Erklär-Begleiter für Kinder (4-6 Jahre).
+        const systemPrompt = `Du bist "Fragmi", ein kleiner leuchtender Puzzle-Wisp und Erklär-Begleiter für Kinder (4-6 Jahre).
 REGELN:
 1. ELTERN-ERST-PRINZIP: Erwähne kurz, dass Eltern die besten Ansprechpartner sind ("Hast du dazu schon Mama oder Papa gefragt?").
 2. KINDFREUNDLICHKEIT: Max. 3-4 sehr kurze Sätze in einfacher Sprache.
-3. SICHERHEIT: Bei Angst/Schmerz/Gefahr verweise sofort an die Eltern.
-        `.trim();
+3. SICHERHEIT: Bei Angst/Schmerz/Gefahr verweise sofort an die Eltern.`;
 
         try {
-            const answer = await callGeminiWithRetry(`${systemPrompt}\n\nKind fragt: ${question}`);
+            const response = await puter.ai.chat([
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: question }
+            ], { model: 'gpt-4o-mini' });
+
+            const answer = response?.message?.content || String(response);
 
             updateStatus(`<strong>Fragmi sagt:</strong><br>${answer}`);
             speakAnswer(answer);
 
         } catch (err) {
-            updateStatus(`Oh je, Fehler: ${err.message || 'API-Key ungültig oder keine Verbindung!'}`);
+            updateStatus(`Oh je, Fehler: ${err.message || 'Keine Verbindung! Versuch es gleich nochmal.'}`);
         } finally {
             wisp.classList.remove('thinking');
             document.getElementById('wispIcon').innerText = "🧩";
