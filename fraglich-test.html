@@ -146,6 +146,15 @@
         font-size: 0.75rem;
         text-align: center;
     }
+    .speak-indicator {
+        display: inline-block;
+        margin-left: 8px;
+        animation: speakPulse 1s infinite;
+    }
+    @keyframes speakPulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
 </style>
 </head>
 <body>
@@ -155,7 +164,7 @@
 
 <div class="card">
     <div style="text-align:center">
-        <span class="badge">✅ Einfach fragen – Fragmi erklärt es direkt!</span>
+        <span class="badge">🔊 Fragmi spricht die Antwort laut vor!</span>
     </div>
 
     <div class="wisp-area">
@@ -170,7 +179,7 @@
         <button class="btn" onclick="askTyped()">Fragen</button>
     </div>
 
-    <div id="statusText">Hallo! Ich bin Fragmi. Drück mich und stell mir eine Frage – ich erkläre es dir direkt und freundlich! ✨</div>
+    <div id="statusText">Hallo! Ich bin Fragmi. Drück mich und stell mir eine Frage – ich erkläre es dir direkt und lese es laut vor! 🔊✨</div>
 </div>
 
 <footer>Fraglich · Kostenlos via Puter.js · Kein Key, kein Server nötig</footer>
@@ -179,6 +188,21 @@
     let isListening = false;
     let recognition;
     let synth = window.speechSynthesis;
+    let voicesLoaded = false;
+
+    // Stimmen sofort laden (wichtig für iPad)
+    function loadVoices() {
+        if (synth) {
+            synth.getVoices();
+            voicesLoaded = true;
+        }
+    }
+
+    // Beim Laden und bei Interaktion Stimmen laden
+    loadVoices();
+    if (synth) {
+        synth.onvoiceschanged = loadVoices;
+    }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -202,6 +226,9 @@
     }
 
     function toggleListening() {
+        // Stimmen bei erster Interaktion laden (iPad-Besonderheit)
+        loadVoices();
+
         if (!isListening) {
             isListening = true;
             const wisp = document.getElementById('wispBtn');
@@ -224,6 +251,7 @@
     }
 
     function askTyped() {
+        loadVoices(); // Stimmen laden
         const q = document.getElementById('questionInput').value.trim();
         if (!q) return;
         document.getElementById('questionInput').value = '';
@@ -268,7 +296,7 @@ REGELN FÜR DIE PERFEKTE ANTWORT:
 
             const answer = response?.message?.content || String(response);
 
-            updateStatus(`<strong>Fragmi sagt:</strong><br>${answer}`);
+            updateStatus(`<strong>Fragmi sagt:</strong><br>${answer}<span class="speak-indicator">🔊</span>`);
             speakAnswer(answer);
 
         } catch (err) {
@@ -285,33 +313,58 @@ REGELN FÜR DIE PERFEKTE ANTWORT:
     }
 
     function speakAnswer(text) {
-        if (!synth) return;
+        if (!synth) {
+            updateStatus("Sprachausgabe wird auf diesem Gerät nicht unterstützt.");
+            return;
+        }
+
+        // Vorherige Sprache stoppen
         synth.cancel();
 
-        // Suche die beste deutsche Stimme
+        // Beste deutsche Stimme finden
         const voices = synth.getVoices();
         let germanVoice = voices.find(v => v.lang.startsWith('de') && v.name.includes('Google'))
+                       || voices.find(v => v.lang.startsWith('de') && v.name.includes('Anna'))
+                       || voices.find(v => v.lang.startsWith('de') && v.name.includes('Helena'))
                        || voices.find(v => v.lang.startsWith('de') && v.localService)
                        || voices.find(v => v.lang.startsWith('de'));
 
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'de-DE';
+
         if (germanVoice) {
             utterance.voice = germanVoice;
         }
 
-        // Freundliche, warme Kinderstimme
-        utterance.pitch = 1.3;      // etwas höher = freundlicher
-        utterance.rate = 0.9;       // etwas langsamer = verständlicher
+        // Perfekte Kinderstimme
+        utterance.pitch = 1.3;      // höher = freundlicher
+        utterance.rate = 0.9;       // langsamer = verständlicher
         utterance.volume = 1.0;     // volle Lautstärke
 
+        // Events für besseres Feedback
+        utterance.onstart = () => {
+            const status = document.getElementById('statusText');
+            if (!status.innerHTML.includes('🔊')) {
+                status.innerHTML += '<span class="speak-indicator">🔊</span>';
+            }
+        };
+
+        utterance.onend = () => {
+            const indicator = document.querySelector('.speak-indicator');
+            if (indicator) indicator.remove();
+        };
+
+        utterance.onerror = (e) => {
+            console.warn('Sprachfehler:', e);
+        };
+
+        // Sprechen
         synth.speak(utterance);
     }
 
-    // Stimmen laden (manchmal erst nach Verzögerung verfügbar)
-    if (synth) {
-        synth.getVoices();
-    }
+    // iPad-Besonderheit: Stimmen bei erster Berührung laden
+    document.addEventListener('touchstart', loadVoices, { once: true });
+    document.addEventListener('click', loadVoices, { once: true });
 </script>
 
 </body>
