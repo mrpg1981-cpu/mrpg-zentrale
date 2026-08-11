@@ -3,18 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fraglich – Fragmi</title>
+<title>Fragmi – Der Puzzle-Wisp</title>
 <script src="https://js.puter.com/v2/"></script>
 <style>
     :root {
-        --bg: #090a10;
-        --panel: rgba(22, 24, 38, 0.75);
+        --bg: #0b1120;
+        --panel: rgba(30, 41, 59, 0.7);
+        --accent-teal: #38bdf8;
         --accent-glow: #00f2fe;
-        --accent-purple: #7928ca;
-        --accent-pink: #ff0080;
         --text: #f8fafc;
-        --muted: #64748b;
-        --border: rgba(255, 255, 255, 0.08);
+        --muted: #94a3b8;
+        --border: rgba(255, 255, 255, 0.1);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -22,9 +21,9 @@
     body {
         min-height: 100vh;
         background: var(--bg);
-        background-image:
-            radial-gradient(circle at 50% 0%, rgba(121, 40, 202, 0.18), transparent 50%),
-            radial-gradient(circle at 50% 100%, rgba(0, 242, 254, 0.12), transparent 50%);
+        background-image: 
+            radial-gradient(circle at 50% 20%, rgba(56, 189, 248, 0.15), transparent 45%),
+            radial-gradient(circle at 50% 80%, rgba(15, 23, 42, 0.8), transparent 50%);
         color: var(--text);
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
         display: flex;
@@ -36,104 +35,98 @@
 
     .card {
         background: var(--panel);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
         border: 1px solid var(--border);
-        border-radius: 28px;
+        border-radius: 32px;
         padding: 32px 24px;
         width: 100%;
         max-width: 480px;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5),
-                    0 0 1px rgba(255, 255, 255, 0.2) inset;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6), 
+                    0 0 2px rgba(255, 255, 255, 0.2) inset;
         display: flex;
         flex-direction: column;
         align-items: center;
     }
 
-    h1 {
+    .logo-title {
         font-size: 2.2rem;
-        font-weight: 800;
-        letter-spacing: -0.5px;
-        background: linear-gradient(135deg, #fff 30%, var(--muted));
+        font-weight: 900;
+        letter-spacing: 2px;
+        background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
-        margin-bottom: 4px;
+        margin-bottom: 2px;
     }
 
     .sub {
         color: var(--muted);
         font-size: 0.9rem;
-        margin-bottom: 24px;
+        margin-bottom: 20px;
     }
 
-    .whisper-container {
+    .wisp-stage {
         position: relative;
-        width: 100%;
-        height: 160px;
+        width: 220px;
+        height: 220px;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        margin: 10px 0 20px;
+        margin: 10px 0;
+        user-select: none;
     }
 
-    .waveform {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        height: 80px;
+    .wisp-avatar {
+        width: 180px;
+        height: 180px;
+        filter: drop-shadow(0 0 25px rgba(56, 189, 248, 0.4));
+        transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.4s ease;
+        animation: floatWisp 4s ease-in-out infinite alternate;
     }
 
-    .bar {
-        width: 6px;
-        height: 16px;
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 99px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    @keyframes floatWisp {
+        0% { transform: translateY(0px) rotate(0deg); }
+        100% { transform: translateY(-12px) rotate(2deg); }
     }
 
-    .whisper-container.listening .bar {
-        background: linear-gradient(180deg, var(--accent-glow), var(--accent-purple));
-        box-shadow: 0 0 12px var(--accent-glow);
-        animation: wave 1.2s ease-in-out infinite alternate;
+    .wisp-stage.listening .wisp-avatar {
+        filter: drop-shadow(0 0 35px rgba(249, 115, 22, 0.8));
+        animation: listenPulse 1s ease-in-out infinite alternate;
     }
 
-    .whisper-container.thinking .bar {
-        background: linear-gradient(180deg, #ff0080, #7928ca);
-        box-shadow: 0 0 12px #ff0080;
-        animation: pulseBar 0.8s ease-in-out infinite alternate;
+    .wisp-stage.thinking .wisp-avatar {
+        filter: drop-shadow(0 0 35px rgba(168, 85, 247, 0.8));
+        animation: thinkSpin 2s linear infinite;
     }
 
-    .whisper-container.speaking .bar {
-        background: linear-gradient(180deg, #00ff87, #60efff);
-        box-shadow: 0 0 12px #00ff87;
-        animation: wave 0.9s ease-in-out infinite alternate;
+    .wisp-stage.speaking .wisp-avatar {
+        filter: drop-shadow(0 0 35px rgba(56, 189, 248, 0.8));
+        animation: speakBounce 0.6s ease-in-out infinite alternate;
     }
 
-    .whisper-container.listening .bar:nth-child(1) { animation-delay: 0.1s; }
-    .whisper-container.listening .bar:nth-child(2) { animation-delay: 0.3s; }
-    .whisper-container.listening .bar:nth-child(3) { animation-delay: 0.5s; }
-    .whisper-container.listening .bar:nth-child(4) { animation-delay: 0.2s; }
-    .whisper-container.listening .bar:nth-child(5) { animation-delay: 0.4s; }
-
-    @keyframes wave {
-        0% { height: 12px; }
-        100% { height: 65px; }
+    @keyframes listenPulse {
+        0% { transform: scale(1); }
+        100% { transform: scale(1.08); }
     }
 
-    @keyframes pulseBar {
-        0% { height: 20px; opacity: 0.4; }
-        100% { height: 40px; opacity: 1; }
+    @keyframes thinkSpin {
+        0% { transform: rotate(0deg) scale(0.98); }
+        100% { transform: rotate(360deg) scale(0.98); }
     }
 
-    .whisper-label {
-        margin-top: 20px;
-        font-size: 0.85rem;
-        font-weight: 600;
-        letter-spacing: 1.5px;
+    @keyframes speakBounce {
+        0% { transform: translateY(0) scale(1); }
+        100% { transform: translateY(-8px) scale(1.04); }
+    }
+
+    .wisp-label {
+        margin-top: 10px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 2px;
         text-transform: uppercase;
         color: var(--muted);
         transition: color 0.3s ease;
@@ -143,10 +136,11 @@
         width: 100%;
         display: flex;
         gap: 8px;
-        background: rgba(0, 0, 0, 0.25);
+        background: rgba(15, 23, 42, 0.6);
         border: 1px solid var(--border);
         border-radius: 16px;
         padding: 6px 6px 6px 14px;
+        margin-top: 10px;
     }
 
     input[type="text"] {
@@ -161,8 +155,8 @@
     input[type="text"]::placeholder { color: #475569; }
 
     .btn-send {
-        background: var(--text);
-        color: #000;
+        background: linear-gradient(135deg, #38bdf8, #818cf8);
+        color: #fff;
         border: none;
         border-radius: 12px;
         width: 38px;
@@ -175,18 +169,18 @@
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid var(--border);
         color: var(--text);
-        padding: 10px 18px;
+        padding: 8px 16px;
         border-radius: 12px;
         font-size: 0.85rem;
         font-weight: 600;
         cursor: pointer;
-        margin-bottom: 12px;
+        margin-bottom: 8px;
     }
 
     #statusText {
-        margin-top: 20px;
+        margin-top: 18px;
         width: 100%;
-        min-height: 80px;
+        min-height: 75px;
         color: #cbd5e1;
         font-size: 0.95rem;
         line-height: 1.6;
@@ -194,7 +188,7 @@
     }
 
     footer {
-        margin-top: 32px;
+        margin-top: 24px;
         color: #475569;
         font-size: 0.75rem;
         text-align: center;
@@ -204,20 +198,50 @@
 <body>
 
 <div class="card">
-    <h1>Fragmi</h1>
-    <p class="sub">Dein intelligenter Wissens-Begleiter</p>
+    <div class="logo-title">FRAGMI</div>
+    <p class="sub">Der kleine Puzzle-Wisp</p>
 
     <button class="btn-test" onclick="unlockAndTestSafari()">🔊 Safari Stimme aktivieren</button>
 
-    <div class="whisper-container" id="whisperBtn" onclick="toggleListening()">
-        <div class="waveform">
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
-        </div>
-        <div class="whisper-label" id="whisperLabel">Tippen zum Sprechen</div>
+    <div class="wisp-stage" id="wispBtn" onclick="toggleListening()">
+        <svg class="wisp-avatar" viewBox="0 0 200 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <radialGradient id="wispBody" cx="40%" cy="35%" r="65%">
+                    <stop offset="0%" stop-color="#7dd3fc" />
+                    <stop offset="50%" stop-color="#0284c7" />
+                    <stop offset="100%" stop-color="#0f172a" />
+                </radialGradient>
+                <radialGradient id="eyeGlow" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stop-color="#ffffff" />
+                    <stop offset="100%" stop-color="#38bdf8" />
+                </radialGradient>
+            </defs>
+
+            <path d="M100 20 C150 20, 180 60, 180 110 C180 160, 140 190, 100 190 C70 190, 40 210, 25 215 C45 185, 20 150, 20 110 C20 60, 50 20, 100 20 Z" fill="url(#wispBody)" />
+            
+            <path d="M60 40 C80 35, 110 45, 130 35" stroke="rgba(255,255,255,0.25)" stroke-width="2.5" stroke-dasharray="4 4"/>
+            <path d="M35 90 C70 80, 130 95, 165 85" stroke="rgba(255,255,255,0.2)" stroke-width="2"/>
+            <path d="M50 140 C80 130, 120 145, 150 130" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="6 3"/>
+            <path d="M100 20 C100 70, 110 130, 100 190" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+
+            <circle cx="72" cy="100" r="22" fill="#0f172a" />
+            <circle cx="72" cy="100" r="20" fill="url(#eyeGlow)" />
+            <circle cx="72" cy="100" r="13" fill="#030712" />
+            <circle cx="66" cy="94" r="6" fill="#ffffff" />
+            <circle cx="77" cy="105" r="2.5" fill="#ffffff" />
+
+            <circle cx="128" cy="100" r="22" fill="#0f172a" />
+            <circle cx="128" cy="100" r="20" fill="url(#eyeGlow)" />
+            <circle cx="128" cy="100" r="13" fill="#030712" />
+            <circle cx="122" cy="94" r="6" fill="#ffffff" />
+            <circle cx="133" cy="105" r="2.5" fill="#ffffff" />
+
+            <path d="M90 130 Q100 138 110 130" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" fill="none" />
+            
+            <circle cx="55" cy="118" r="8" fill="#38bdf8" opacity="0.3" />
+            <circle cx="145" cy="118" r="8" fill="#38bdf8" opacity="0.3" />
+        </svg>
+        <div class="wisp-label" id="wispLabel">Drücken zum Sprechen</div>
     </div>
 
     <div class="input-group">
@@ -225,19 +249,17 @@
         <button class="btn-send" onclick="askTyped()">↑</button>
     </div>
 
-    <div id="statusText">Tippe oben zuerst auf <strong>"Safari Stimme aktivieren"</strong>, damit das iPad sprechen darf! 🔊</div>
+    <div id="statusText">Tippe oben zuerst auf <strong>"Safari Stimme aktivieren"</strong>! 🧩✨</div>
 </div>
 
-<footer>Fraglich · OpenAI/Whisper UI · Safari iPad-Fix</footer>
+<footer>Fragmi · Design Vorschlag A · Puter.js KI</footer>
 
 <script>
     let isListening = false;
     let recognition;
     let synth = window.speechSynthesis;
     let isSpeaking = false;
-    let audioUnlocked = false;
 
-    // Safari Fix: Audio-Engine sofort beim ERSTEN Klick entsperren
     function forceUnlockSafari() {
         if (!synth) return;
         synth.resume();
@@ -245,49 +267,30 @@
         silent.volume = 0.01;
         silent.lang = 'de-DE';
         synth.speak(silent);
-        audioUnlocked = true;
     }
 
-    // Beste kinderfreundliche deutsche Stimme finden
-    // iPad hat oft "Enhanced"/"Premium" Stimmen, die viel natürlicher klingen
     function getGermanVoice() {
         if (!synth) return null;
-        const voices = synth.getVoices().filter(v => v.lang.startsWith('de'));
-
-        // 1. Priorität: Enhanced/Premium Stimmen (klingen am natürlichsten)
-        let voice = voices.find(v => v.name.includes('Anna') && (v.name.includes('Enhanced') || v.name.includes('Premium')))
-                 || voices.find(v => v.name.includes('Helena') && (v.name.includes('Enhanced') || v.name.includes('Premium')))
-                 || voices.find(v => v.name.includes('Enhanced') || v.name.includes('Premium'));
-
-        // 2. Priorität: iOS-Standardstimmen
-        if (!voice) {
-            voice = voices.find(v => v.name.includes('Anna'))
-                 || voices.find(v => v.name.includes('Helena'))
-                 || voices.find(v => v.name.includes('Google'));
-        }
-
-        // 3. Fallback: irgendeine deutsche Stimme
-        if (!voice) {
-            voice = voices.find(v => v.localService) || voices[0];
-        }
-
-        return voice;
+        const voices = synth.getVoices();
+        return voices.find(v => v.lang.startsWith('de') && v.name.includes('Anna'))
+            || voices.find(v => v.lang.startsWith('de') && v.name.includes('Helena'))
+            || voices.find(v => v.lang.startsWith('de') && v.name.includes('Google'))
+            || voices.find(v => v.lang.startsWith('de') && v.localService)
+            || voices.find(v => v.lang.startsWith('de'));
     }
 
     function unlockAndTestSafari() {
         forceUnlockSafari();
-
         setTimeout(() => {
             synth.cancel();
-            const u = new SpeechSynthesisUtterance("Hallo! Ich bin Fragmi, dein kleiner Puzzle-Freund. Schön, dass du da bist!");
+            const u = new SpeechSynthesisUtterance("Hallo! Ich bin Fragmi, dein Puzzle-Wisp! Ich bin bereit für deine Fragen.");
             u.lang = 'de-DE';
             const v = getGermanVoice();
             if (v) u.voice = v;
-            u.pitch = 1.4;   // kindlicher
-            u.rate = 0.95;   // natürliches Tempo
-
+            u.pitch = 1.25;
+            u.rate = 0.9;
             synth.speak(u);
-            updateStatus("🔊 Wenn du das hörst, ist Safari perfekt freigeschaltet!");
+            updateStatus("🔊 Perfekt! Fragmi ist freigeschaltet und kann sprechen.");
         }, 100);
     }
 
@@ -304,11 +307,11 @@
 
         recognition.onerror = () => {
             updateStatus("Ich konnte dich nicht verstehen. Versuche es nochmal oder tippe unten!");
-            resetWhisper();
+            resetWisp();
         };
 
         recognition.onend = () => {
-            if(isListening) resetWhisper();
+            if(isListening) resetWisp();
         };
     }
 
@@ -318,33 +321,28 @@
         if (isSpeaking) {
             synth.cancel();
             isSpeaking = false;
-            resetWhisper();
+            resetWisp();
             updateStatus("Vorlesen gestoppt.");
             return;
         }
 
         if (!isListening) {
             isListening = true;
-            const container = document.getElementById('whisperBtn');
-            container.className = "whisper-container listening";
-            document.getElementById('whisperLabel').innerText = "Höre zu...";
+            const container = document.getElementById('wispBtn');
+            container.className = "wisp-stage listening";
+            document.getElementById('wispLabel').innerText = "Höre zu...";
             updateStatus("Ich höre dir zu...");
 
             if (recognition) {
-                try {
-                    recognition.start();
-                } catch(e) {
-                    resetWhisper();
-                    document.getElementById('questionInput').focus();
-                }
+                try { recognition.start(); } catch(e) { resetWisp(); }
             } else {
-                resetWhisper();
+                resetWisp();
                 document.getElementById('questionInput').focus();
-                updateStatus("Spracheingabe im Safari nicht unterstützt – bitte unten eintippen!");
+                updateStatus("Spracheingabe hier nicht unterstützt – bitte eintippen!");
             }
         } else {
             if (recognition) recognition.stop();
-            resetWhisper();
+            resetWisp();
         }
     }
 
@@ -356,29 +354,28 @@
         handleUserQuestion(q);
     }
 
-    function resetWhisper() {
+    function resetWisp() {
         isListening = false;
-        const container = document.getElementById('whisperBtn');
-        container.className = "whisper-container";
-        document.getElementById('whisperLabel').innerText = "Tippen zum Sprechen";
+        const container = document.getElementById('wispBtn');
+        container.className = "wisp-stage";
+        document.getElementById('wispLabel').innerText = "Drücken zum Sprechen";
     }
 
     async function handleUserQuestion(question) {
-        resetWhisper();
-        const container = document.getElementById('whisperBtn');
-        container.className = "whisper-container thinking";
-        document.getElementById('whisperLabel').innerText = "Verarbeite...";
+        resetWisp();
+        const container = document.getElementById('wispBtn');
+        container.className = "wisp-stage thinking";
+        document.getElementById('wispLabel').innerText = "Denkt nach...";
 
         updateStatus(`<em>Fragmi denkt nach...</em>`);
 
-        // WICHTIG FÜR SAFARI: Audio-Kanal offen halten während die KI denkt
         if (synth) {
             synth.resume();
             const dummy = new SpeechSynthesisUtterance("");
             synth.speak(dummy);
         }
 
-        const systemPrompt = `Du bist "Fragmi", ein freundlicher, leuchtender Wissensbegleiter für Kinder (4-6 Jahre).
+        const systemPrompt = `Du bist "Fragmi", ein freundlicher, leuchtender Puzzle-Wisp und Erklär-Begleiter für Kinder (4-6 Jahre).
 
 DEINE AUFGABE:
 Erkläre die Frage DIREKT, AUSFÜHRLICH und PERFEKT – so, dass ein 4-6-jähriges Kind es versteht und etwas lernt.
@@ -386,9 +383,9 @@ Erkläre die Frage DIREKT, AUSFÜHRLICH und PERFEKT – so, dass ein 4-6-jährig
 REGELN FÜR DIE ANTWORT:
 1. DIREKTE ANTWORT: Beantworte die Frage sofort am Anfang.
 2. DETAILLIERT: Erkläre mit 4-5 kurzen Sätzen.
-3. KINDGERECHT: Einfache Worte.
+3. KINDGERECHT: Einfache Worte, bildhafte Vergleiche.
 4. NIEMALS Eltern erwähnen: Du antwortest selbst!
-5. WICHTIG: Schreiben NUR reinen Text ohne Emojis, ohne Sternchen, ohne Markdown!`;
+5. WICHTIG: Schreibe NUR reinen Text ohne Emojis, ohne Sternchen, ohne Markdown!`;
 
         try {
             const response = await puter.ai.chat([
@@ -404,7 +401,7 @@ REGELN FÜR DIE ANTWORT:
 
         } catch (err) {
             updateStatus(`Fehler: ${err.message || 'Verbindung fehlgeschlagen.'}`);
-            resetWhisper();
+            resetWisp();
         }
     }
 
@@ -412,7 +409,6 @@ REGELN FÜR DIE ANTWORT:
         document.getElementById('statusText').innerHTML = text;
     }
 
-    // Kindliche, flüssige Sprachausgabe mit natürlichem Fluss
     function speakAnswerSafari(text) {
         if (!synth) return;
 
@@ -420,50 +416,32 @@ REGELN FÜR DIE ANTWORT:
         synth.resume();
         isSpeaking = true;
 
-        const container = document.getElementById('whisperBtn');
-        container.className = "whisper-container speaking";
-        document.getElementById('whisperLabel').innerText = "Liest vor...";
+        const container = document.getElementById('wispBtn');
+        container.className = "wisp-stage speaking";
+        document.getElementById('wispLabel').innerText = "Liest vor...";
 
         const germanVoice = getGermanVoice();
-
-        // In Sätze aufteilen (Safari-Fix + natürliche Pausen)
         const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
         let index = 0;
 
         function speakSentence() {
             if (index >= sentences.length || !isSpeaking) {
                 isSpeaking = false;
-                resetWhisper();
+                resetWisp();
                 return;
             }
 
             const sentenceText = sentences[index].trim();
-            if (!sentenceText) {
-                index++;
-                speakSentence();
-                return;
-            }
+            if(!sentenceText) { index++; speakSentence(); return; }
 
             const utterance = new SpeechSynthesisUtterance(sentenceText);
             utterance.lang = 'de-DE';
             if (germanVoice) utterance.voice = germanVoice;
+            utterance.pitch = 1.25;
+            utterance.rate = 0.9;
 
-            // KINDLICHE STIMME:
-            // Leicht variierende Tonhöhe pro Satz = klingt lebendig, nicht roboterhaft
-            utterance.pitch = 1.35 + (Math.random() * 0.1);  // 1.35–1.45, kindlich hoch
-            utterance.rate = 0.92;                            // natürliches, ruhiges Tempo
-            utterance.volume = 1.0;
-
-            utterance.onend = () => {
-                index++;
-                // Kurze natürliche Pause zwischen Sätzen (150ms)
-                setTimeout(speakSentence, 150);
-            };
-
-            utterance.onerror = () => {
-                index++;
-                speakSentence();
-            };
+            utterance.onend = () => { index++; speakSentence(); };
+            utterance.onerror = () => { index++; speakSentence(); };
 
             synth.resume();
             synth.speak(utterance);
@@ -472,7 +450,6 @@ REGELN FÜR DIE ANTWORT:
         speakSentence();
     }
 
-    // Event Listener für Safari Touch-Freischaltung
     document.addEventListener('touchstart', forceUnlockSafari, { once: true });
     document.addEventListener('click', forceUnlockSafari, { once: true });
 </script>
