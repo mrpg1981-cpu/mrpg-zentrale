@@ -164,7 +164,7 @@
 
 <div class="card">
     <div style="text-align:center">
-        <span class="badge">🔊 Fragmi spricht die Antwort laut vor!</span>
+        <span class="badge">🔊 Fragmi erklärt alles ausführlich und liest es vor!</span>
     </div>
 
     <div class="wisp-area">
@@ -179,7 +179,7 @@
         <button class="btn" onclick="askTyped()">Fragen</button>
     </div>
 
-    <div id="statusText">Hallo! Ich bin Fragmi. Drück mich und stell mir eine Frage – ich erkläre es dir direkt und lese es laut vor! 🔊✨</div>
+    <div id="statusText">Hallo! Ich bin Fragmi. Drück mich und stell mir eine Frage – ich erkläre dir alles genau und lese es laut vor! 🔊✨</div>
 </div>
 
 <footer>Fraglich · Kostenlos via Puter.js · Kein Key, kein Server nötig</footer>
@@ -188,21 +188,12 @@
     let isListening = false;
     let recognition;
     let synth = window.speechSynthesis;
-    let voicesLoaded = false;
 
-    // Stimmen sofort laden (wichtig für iPad)
     function loadVoices() {
-        if (synth) {
-            synth.getVoices();
-            voicesLoaded = true;
-        }
+        if (synth) synth.getVoices();
     }
-
-    // Beim Laden und bei Interaktion Stimmen laden
     loadVoices();
-    if (synth) {
-        synth.onvoiceschanged = loadVoices;
-    }
+    if (synth) synth.onvoiceschanged = loadVoices;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -226,7 +217,6 @@
     }
 
     function toggleListening() {
-        // Stimmen bei erster Interaktion laden (iPad-Besonderheit)
         loadVoices();
 
         if (!isListening) {
@@ -251,7 +241,7 @@
     }
 
     function askTyped() {
-        loadVoices(); // Stimmen laden
+        loadVoices();
         const q = document.getElementById('questionInput').value.trim();
         if (!q) return;
         document.getElementById('questionInput').value = '';
@@ -278,15 +268,16 @@
         const systemPrompt = `Du bist "Fragmi", ein freundlicher, leuchtender Puzzle-Wisp und Erklär-Begleiter für Kinder (4-6 Jahre).
 
 DEINE AUFGABE:
-Erkläre die Frage DIREKT und PERFEKT – so, dass ein 4-6-jähriges Kind es sofort versteht und begeistert ist.
+Erkläre die Frage DIREKT, AUSFÜHRLICH und PERFEKT – so, dass ein 4-6-jähriges Kind es versteht und etwas lernt.
 
 REGELN FÜR DIE PERFEKTE ANTWORT:
-1. DIREKTE ANTWORT: Beantworte die Frage sofort, ohne Umschweife.
-2. KINDGERECHT: Nutze einfache, klare Worte. Maximal 3-4 kurze Sätze.
-3. BEGEISTERND: Klinge freundlich, warm und ein bisschen magisch. Nutze Vergleiche aus der Kinderwelt (Tiere, Spielzeug, Essen, Märchen).
-4. KEINE VERWEISE: Sage NICHT "frag Mama oder Papa" – du bist der Experte!
-5. SICHERHEIT: Nur bei echten Gefahren (Feuer, Straße, Schmerz) sage liebevoll: "Das ist wichtig – zeig das bitte einem Erwachsenen."
-6. STIL: Beginne oft mit "Das ist eine tolle Frage!" oder "Ich erkläre es dir!"`;
+1. DIREKTE ANTWORT: Beantworte die Frage sofort am Anfang.
+2. DETAILLIERT: Erkläre mit 5-7 Sätzen. Erst die einfache Antwort, dann ein Beispiel aus der Kinderwelt, dann eine spannende Zusatzinfo.
+3. KINDGERECHT: Einfache, klare Worte. Vergleiche mit Tieren, Spielzeug, Essen oder Märchen.
+4. BEGEISTERND: Freundlich, warm und ein bisschen magisch.
+5. NIEMALS Eltern erwähnen: Sage NIEMALS "frag Mama oder Papa" oder ähnliches. Du bist der Experte und antwortest immer selbst!
+6. SICHERHEIT: Nur bei echten Gefahren für das Kind (z.B. Feuer, Verkehr) erkläre kurz und liebevoll, warum man vorsichtig sein muss.
+7. STIL: Beginne mit "Das ist eine tolle Frage!" oder "Ich erkläre es dir genau!"`;
 
         try {
             const response = await puter.ai.chat([
@@ -318,10 +309,8 @@ REGELN FÜR DIE PERFEKTE ANTWORT:
             return;
         }
 
-        // Vorherige Sprache stoppen
         synth.cancel();
 
-        // Beste deutsche Stimme finden
         const voices = synth.getVoices();
         let germanVoice = voices.find(v => v.lang.startsWith('de') && v.name.includes('Google'))
                        || voices.find(v => v.lang.startsWith('de') && v.name.includes('Anna'))
@@ -336,12 +325,10 @@ REGELN FÜR DIE PERFEKTE ANTWORT:
             utterance.voice = germanVoice;
         }
 
-        // Perfekte Kinderstimme
-        utterance.pitch = 1.3;      // höher = freundlicher
-        utterance.rate = 0.9;       // langsamer = verständlicher
-        utterance.volume = 1.0;     // volle Lautstärke
+        utterance.pitch = 1.3;
+        utterance.rate = 0.9;
+        utterance.volume = 1.0;
 
-        // Events für besseres Feedback
         utterance.onstart = () => {
             const status = document.getElementById('statusText');
             if (!status.innerHTML.includes('🔊')) {
@@ -354,15 +341,9 @@ REGELN FÜR DIE PERFEKTE ANTWORT:
             if (indicator) indicator.remove();
         };
 
-        utterance.onerror = (e) => {
-            console.warn('Sprachfehler:', e);
-        };
-
-        // Sprechen
         synth.speak(utterance);
     }
 
-    // iPad-Besonderheit: Stimmen bei erster Berührung laden
     document.addEventListener('touchstart', loadVoices, { once: true });
     document.addEventListener('click', loadVoices, { once: true });
 </script>
