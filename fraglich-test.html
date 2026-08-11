@@ -133,6 +133,12 @@
         white-space: nowrap;
     }
     .btn:hover { filter: brightness(1.15); }
+    .btn.secondary {
+        background: var(--panel);
+        border: 1px solid rgba(123,92,255,.4);
+        width: 100%;
+        margin-top: 12px;
+    }
     #statusText {
         margin-top: 22px;
         min-height: 70px;
@@ -163,6 +169,8 @@
         <span class="badge">🔊 Fragmi liest dir alles laut vor!</span>
     </div>
 
+    <button class="btn secondary" onclick="testVoice()">🔊 1. Zuerst hier tippen: Stimme testen</button>
+
     <div class="wisp-area">
         <button id="wispBtn" onclick="toggleListening()">
             <span id="wispIcon">🧩</span>
@@ -171,11 +179,11 @@
     </div>
 
     <div class="textrow">
-        <input type="text" id="questionInput" placeholder="Oder tippe deine Frage hier …" onkeydown="if(event.key==='Enter')askTyped()">
+        <input type="text" id="questionInput" placeholder="2. Frage hier eintippen …" onkeydown="if(event.key==='Enter')askTyped()">
         <button class="btn" onclick="askTyped()">Fragen</button>
     </div>
 
-    <div id="statusText">Hallo! Ich bin Fragmi. Drück mich und stell mir eine Frage – ich erkläre dir alles und lese es dir laut vor! 🔊✨</div>
+    <div id="statusText">Hallo! Ich bin Fragmi. Tippe zuerst oben auf „Stimme testen" – dann stell mir eine Frage! 🔊✨</div>
 </div>
 
 <footer>Fraglich · Kostenlos via Puter.js · Kein Key, kein Server nötig</footer>
@@ -185,12 +193,54 @@
     let recognition;
     let synth = window.speechSynthesis;
     let isSpeaking = false;
+    let speechUnlocked = false;
 
     function loadVoices() {
         if (synth) synth.getVoices();
     }
     loadVoices();
     if (synth) synth.onvoiceschanged = loadVoices;
+
+    // WICHTIG für iPad: Sprach-Engine durch direkten Tipp freischalten
+    function unlockSpeech() {
+        if (!synth || speechUnlocked) return;
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0.01;
+        u.lang = 'de-DE';
+        synth.speak(u);
+        speechUnlocked = true;
+    }
+
+    function getGermanVoice() {
+        const voices = synth.getVoices();
+        return voices.find(v => v.lang.startsWith('de') && v.name.includes('Google'))
+            || voices.find(v => v.lang.startsWith('de') && v.name.includes('Anna'))
+            || voices.find(v => v.lang.startsWith('de') && v.name.includes('Helena'))
+            || voices.find(v => v.lang.startsWith('de') && v.localService)
+            || voices.find(v => v.lang.startsWith('de'));
+    }
+
+    // Test-Button: Direkter Tipp = Sprache funktioniert garantiert
+    function testVoice() {
+        if (!synth) {
+            updateStatus("⚠️ Dein Browser unterstützt leider keine Sprachausgabe.");
+            return;
+        }
+        loadVoices();
+        synth.cancel();
+
+        const u = new SpeechSynthesisUtterance("Hallo! Ich bin Fragmi, dein Puzzle-Wisp. Wenn du mich hörst, funktioniert alles!");
+        u.lang = 'de-DE';
+        const v = getGermanVoice();
+        if (v) u.voice = v;
+        u.pitch = 1.3;
+        u.rate = 0.9;
+        u.volume = 1.0;
+
+        speechUnlocked = true;
+        synth.speak(u);
+        updateStatus("🔊 Hörst du mich? Wenn ja: Super! Dann stell mir unten eine Frage. Wenn nein: Prüfe die Lautstärke deines iPads und ob der Stumm-Schalter aus ist.");
+    }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -214,9 +264,9 @@
     }
 
     function toggleListening() {
+        unlockSpeech();
         loadVoices();
 
-        // Wenn gerade vorgelesen wird: Stopp
         if (isSpeaking) {
             synth.cancel();
             isSpeaking = false;
@@ -247,6 +297,7 @@
     }
 
     function askTyped() {
+        unlockSpeech();
         loadVoices();
         const q = document.getElementById('questionInput').value.trim();
         if (!q) return;
@@ -293,8 +344,6 @@ REGELN FÜR DIE PERFEKTE ANTWORT:
             ], { model: 'gpt-4o-mini' });
 
             let answer = response?.message?.content || String(response);
-
-            // Text für Sprachausgabe säubern (Markdown, Emojis entfernen)
             answer = answer.replace(/[*_#`]/g, '').trim();
 
             updateStatus(`<strong>Fragmi sagt:</strong><br>${answer}`);
@@ -311,9 +360,7 @@ REGELN FÜR DIE PERFEKTE ANTWORT:
     }
 
     function speakAnswer(text) {
-        if (!synth) {
-            return;
-        }
+        if (!synth) return;
 
         synth.cancel();
         isSpeaking = true;
@@ -324,15 +371,9 @@ REGELN FÜR DIE PERFEKTE ANTWORT:
         document.getElementById('wispIcon').innerText = "🔊";
         document.getElementById('wispLabel').innerText = "LEST VOR...";
 
-        // Beste deutsche Stimme finden
-        const voices = synth.getVoices();
-        let germanVoice = voices.find(v => v.lang.startsWith('de') && v.name.includes('Google'))
-                       || voices.find(v => v.lang.startsWith('de') && v.name.includes('Anna'))
-                       || voices.find(v => v.lang.startsWith('de') && v.name.includes('Helena'))
-                       || voices.find(v => v.lang.startsWith('de') && v.localService)
-                       || voices.find(v => v.lang.startsWith('de'));
+        const germanVoice = getGermanVoice();
 
-        // iPad-Fix: Text in Sätze aufteilen (Safari bricht lange Texte ab)
+        // iPad-Fix: Text in Sätze aufteilen
         const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
         let index = 0;
 
@@ -361,14 +402,16 @@ REGELN FÜR DIE PERFEKTE ANTWORT:
             };
 
             synth.speak(utterance);
+
+            // iPad-Fix: Engine wach halten
+            if (synth.paused) synth.resume();
         }
 
-        // Kleine Verzögerung nach cancel() – wichtig für iPad
         setTimeout(speakNext, 150);
     }
 
-    document.addEventListener('touchstart', loadVoices, { once: true });
-    document.addEventListener('click', loadVoices, { once: true });
+    document.addEventListener('touchstart', () => { loadVoices(); unlockSpeech(); }, { once: true });
+    document.addEventListener('click', () => { loadVoices(); unlockSpeech(); }, { once: true });
 </script>
 
 </body>
