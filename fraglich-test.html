@@ -269,28 +269,55 @@
         synth.speak(silent);
     }
 
+    // MENSCHLICHSTE + KINDLICHSTE deutsche Stimme finden
     function getGermanVoice() {
         if (!synth) return null;
-        const voices = synth.getVoices();
-        return voices.find(v => v.lang.startsWith('de') && v.name.includes('Anna'))
-            || voices.find(v => v.lang.startsWith('de') && v.name.includes('Helena'))
-            || voices.find(v => v.lang.startsWith('de') && v.name.includes('Google'))
-            || voices.find(v => v.lang.startsWith('de') && v.localService)
-            || voices.find(v => v.lang.startsWith('de'));
+        const voices = synth.getVoices().filter(v => v.lang.startsWith('de'));
+
+        // 1. Siri-Stimmen auf iOS (klingen am menschlichsten)
+        let voice = voices.find(v => v.name.includes('Siri') && v.name.includes('2'))
+                 || voices.find(v => v.name.includes('Siri'));
+
+        // 2. Enhanced/Premium Stimmen
+        if (!voice) {
+            voice = voices.find(v => v.name.includes('Enhanced') || v.name.includes('Premium'));
+        }
+
+        // 3. iOS-Standardstimmen (Anna/Helena sind weiblich und freundlich)
+        if (!voice) {
+            voice = voices.find(v => v.name.includes('Anna'))
+                 || voices.find(v => v.name.includes('Helena'))
+                 || voices.find(v => v.name.includes('Petra'))
+                 || voices.find(v => v.name.includes('Google'));
+        }
+
+        // 4. Fallback
+        if (!voice) {
+            voice = voices.find(v => v.localService) || voices[0];
+        }
+
+        return voice;
+    }
+
+    // Kinderstimmen-Profil: hoch, warm, lebendig
+    function applyChildVoice(utterance, variation = 0) {
+        const v = getGermanVoice();
+        if (v) utterance.voice = v;
+        utterance.lang = 'de-DE';
+        // Hoher Pitch = kindlich. Leichte Variation pro Satz = lebendig.
+        utterance.pitch = 1.55 + variation;   // 1.5–1.65 = deutlich kindlicher
+        utterance.rate = 0.95;                // flüssig, aber verständlich
+        utterance.volume = 1.0;
     }
 
     function unlockAndTestSafari() {
         forceUnlockSafari();
         setTimeout(() => {
             synth.cancel();
-            const u = new SpeechSynthesisUtterance("Hallo! Ich bin Fragmi, dein Puzzle-Wisp! Ich bin bereit für deine Fragen.");
-            u.lang = 'de-DE';
-            const v = getGermanVoice();
-            if (v) u.voice = v;
-            u.pitch = 1.25;
-            u.rate = 0.9;
+            const u = new SpeechSynthesisUtterance("Hallo! Ich bin Fragmi, dein kleiner Puzzle-Wisp! Ich freue mich so sehr, mit dir zu spielen und deine Fragen zu beantworten!");
+            applyChildVoice(u);
             synth.speak(u);
-            updateStatus("🔊 Perfekt! Fragmi ist freigeschaltet und kann sprechen.");
+            updateStatus("🔊 Hörst du Fragmis Kinderstimme? Dann kann es losgehen!");
         }, 100);
     }
 
@@ -420,7 +447,6 @@ REGELN FÜR DIE ANTWORT:
         container.className = "wisp-stage speaking";
         document.getElementById('wispLabel').innerText = "Liest vor...";
 
-        const germanVoice = getGermanVoice();
         const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
         let index = 0;
 
@@ -435,12 +461,13 @@ REGELN FÜR DIE ANTWORT:
             if(!sentenceText) { index++; speakSentence(); return; }
 
             const utterance = new SpeechSynthesisUtterance(sentenceText);
-            utterance.lang = 'de-DE';
-            if (germanVoice) utterance.voice = germanVoice;
-            utterance.pitch = 1.25;
-            utterance.rate = 0.9;
+            // Kinderstimme mit leichter Variation pro Satz (lebendig statt Roboter)
+            applyChildVoice(utterance, (index % 3) * 0.05);
 
-            utterance.onend = () => { index++; speakSentence(); };
+            utterance.onend = () => {
+                index++;
+                setTimeout(speakSentence, 120); // kurze natürliche Pause
+            };
             utterance.onerror = () => { index++; speakSentence(); };
 
             synth.resume();
