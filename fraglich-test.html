@@ -248,14 +248,30 @@
         audioUnlocked = true;
     }
 
+    // Beste kinderfreundliche deutsche Stimme finden
+    // iPad hat oft "Enhanced"/"Premium" Stimmen, die viel natürlicher klingen
     function getGermanVoice() {
         if (!synth) return null;
-        const voices = synth.getVoices();
-        return voices.find(v => v.lang.startsWith('de') && v.name.includes('Anna'))
-            || voices.find(v => v.lang.startsWith('de') && v.name.includes('Helena'))
-            || voices.find(v => v.lang.startsWith('de') && v.name.includes('Google'))
-            || voices.find(v => v.lang.startsWith('de') && v.localService)
-            || voices.find(v => v.lang.startsWith('de'));
+        const voices = synth.getVoices().filter(v => v.lang.startsWith('de'));
+
+        // 1. Priorität: Enhanced/Premium Stimmen (klingen am natürlichsten)
+        let voice = voices.find(v => v.name.includes('Anna') && (v.name.includes('Enhanced') || v.name.includes('Premium')))
+                 || voices.find(v => v.name.includes('Helena') && (v.name.includes('Enhanced') || v.name.includes('Premium')))
+                 || voices.find(v => v.name.includes('Enhanced') || v.name.includes('Premium'));
+
+        // 2. Priorität: iOS-Standardstimmen
+        if (!voice) {
+            voice = voices.find(v => v.name.includes('Anna'))
+                 || voices.find(v => v.name.includes('Helena'))
+                 || voices.find(v => v.name.includes('Google'));
+        }
+
+        // 3. Fallback: irgendeine deutsche Stimme
+        if (!voice) {
+            voice = voices.find(v => v.localService) || voices[0];
+        }
+
+        return voice;
     }
 
     function unlockAndTestSafari() {
@@ -263,12 +279,12 @@
 
         setTimeout(() => {
             synth.cancel();
-            const u = new SpeechSynthesisUtterance("Hallo! Ich bin Fragmi. Ich kann jetzt auch im Safari sprechen!");
+            const u = new SpeechSynthesisUtterance("Hallo! Ich bin Fragmi, dein kleiner Puzzle-Freund. Schön, dass du da bist!");
             u.lang = 'de-DE';
             const v = getGermanVoice();
             if (v) u.voice = v;
-            u.pitch = 1.2;
-            u.rate = 0.95;
+            u.pitch = 1.4;   // kindlicher
+            u.rate = 0.95;   // natürliches Tempo
 
             synth.speak(u);
             updateStatus("🔊 Wenn du das hörst, ist Safari perfekt freigeschaltet!");
@@ -355,7 +371,7 @@
 
         updateStatus(`<em>Fragmi denkt nach...</em>`);
 
-        // WICHTIG FÜR SAFARI: Noch WÄHREND die KI nachdenkt, leere Utterance starten um den Kanal offen zu halten
+        // WICHTIG FÜR SAFARI: Audio-Kanal offen halten während die KI denkt
         if (synth) {
             synth.resume();
             const dummy = new SpeechSynthesisUtterance("");
@@ -396,12 +412,12 @@ REGELN FÜR DIE ANTWORT:
         document.getElementById('statusText').innerHTML = text;
     }
 
-    // Spezieller Safari-Chunking-Mechanismus für flüssige Sprache
+    // Kindliche, flüssige Sprachausgabe mit natürlichem Fluss
     function speakAnswerSafari(text) {
         if (!synth) return;
 
         synth.cancel();
-        synth.resume(); // Safari Audio-Engine reaktivieren
+        synth.resume();
         isSpeaking = true;
 
         const container = document.getElementById('whisperBtn');
@@ -410,7 +426,7 @@ REGELN FÜR DIE ANTWORT:
 
         const germanVoice = getGermanVoice();
 
-        // Aufteilen in einzelne Sätze
+        // In Sätze aufteilen (Safari-Fix + natürliche Pausen)
         const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
         let index = 0;
 
@@ -422,7 +438,7 @@ REGELN FÜR DIE ANTWORT:
             }
 
             const sentenceText = sentences[index].trim();
-            if(!sentenceText) {
+            if (!sentenceText) {
                 index++;
                 speakSentence();
                 return;
@@ -431,12 +447,17 @@ REGELN FÜR DIE ANTWORT:
             const utterance = new SpeechSynthesisUtterance(sentenceText);
             utterance.lang = 'de-DE';
             if (germanVoice) utterance.voice = germanVoice;
-            utterance.pitch = 1.2;
-            utterance.rate = 0.9;
+
+            // KINDLICHE STIMME:
+            // Leicht variierende Tonhöhe pro Satz = klingt lebendig, nicht roboterhaft
+            utterance.pitch = 1.35 + (Math.random() * 0.1);  // 1.35–1.45, kindlich hoch
+            utterance.rate = 0.92;                            // natürliches, ruhiges Tempo
+            utterance.volume = 1.0;
 
             utterance.onend = () => {
                 index++;
-                speakSentence();
+                // Kurze natürliche Pause zwischen Sätzen (150ms)
+                setTimeout(speakSentence, 150);
             };
 
             utterance.onerror = () => {
@@ -444,7 +465,6 @@ REGELN FÜR DIE ANTWORT:
                 speakSentence();
             };
 
-            // Safari braucht manchmal ein Resume zwischendurch
             synth.resume();
             synth.speak(utterance);
         }
