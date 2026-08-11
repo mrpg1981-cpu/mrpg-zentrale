@@ -300,9 +300,9 @@
     let synth = window.speechSynthesis;
     let isSpeaking = false;
     let speakWatchdog = null;
+    let speakSession = 0;
     let childName = localStorage.getItem('fragmi_childname') || null;
 
-    // Stimmen früh laden (iOS lädt sie asynchron)
     if (synth) {
         synth.getVoices();
         synth.onvoiceschanged = () => synth.getVoices();
@@ -331,32 +331,43 @@
         return voice;
     }
 
-    function applyChildVoice(utterance, variation = 0) {
+    function applyChildVoice(utterance) {
         const v = getGermanVoice();
         if (v) utterance.voice = v;
         utterance.lang = 'de-DE';
-        utterance.pitch = 1.55 + variation;
+        utterance.pitch = 1.55;
         utterance.rate = 0.95;
         utterance.volume = 1.0;
     }
 
+    function clearWatchdog() {
+        if (speakWatchdog) {
+            clearTimeout(speakWatchdog);
+            speakWatchdog = null;
+        }
+    }
+
+    // Stoppt jede laufende Sprachausgabe sauber (Session hochzählen = alte Callbacks werden ignoriert)
+    function stopSpeaking() {
+        speakSession++;
+        clearWatchdog();
+        if (synth) synth.cancel();
+        isSpeaking = false;
+        resetWisp();
+    }
+
     function unlockAndTestSafari() {
         forceUnlockSafari();
-        setTimeout(() => {
-            synth.cancel();
-            let greeting;
-            if (childName) {
-                greeting = `Hallo ${childName}! Schön, dass du wieder da bist! Ich bin Fragmi, dein Puzzle-Wisp. Was möchtest du heute wissen?`;
-            } else {
-                greeting = "Hallo! Ich bin Fragmi, dein kleiner Puzzle-Wisp! Wie heißt du denn?";
-            }
-            const u = new SpeechSynthesisUtterance(greeting);
-            applyChildVoice(u);
-            synth.speak(u);
-            updateStatus(childName
-                ? `🔊 Hallo ${childName}! Fragmi ist bereit für deine Fragen!`
-                : "🔊 Fragmi möchte dich kennenlernen! Sag oder tippe deinen Namen.");
-        }, 150);
+        let greeting;
+        if (childName) {
+            greeting = `Hallo ${childName}! Schön, dass du wieder da bist! Ich bin Fragmi, dein Puzzle-Wisp. Was möchtest du heute wissen?`;
+        } else {
+            greeting = "Hallo! Ich bin Fragmi, dein kleiner Puzzle-Wisp! Wie heißt du denn?";
+        }
+        updateStatus(childName
+            ? `🔊 Hallo ${childName}! Fragmi ist bereit für deine Fragen!`
+            : "🔊 Fragmi möchte dich kennenlernen! Sag oder tippe deinen Namen.");
+        speakAnswerSafari(greeting);
     }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -384,10 +395,7 @@
         forceUnlockSafari();
 
         if (isSpeaking) {
-            clearWatchdog();
-            synth.cancel();
-            isSpeaking = false;
-            resetWisp();
+            stopSpeaking();
             updateStatus("Vorlesen gestoppt.");
             return;
         }
@@ -427,13 +435,6 @@
         document.getElementById('wispLabel').innerText = "Drücken zum Sprechen";
     }
 
-    function clearWatchdog() {
-        if (speakWatchdog) {
-            clearTimeout(speakWatchdog);
-            speakWatchdog = null;
-        }
-    }
-
     function isGreeting(text) {
         const greetings = ['hallo', 'hi', 'hey', 'guten tag', 'guten morgen', 'guten abend', 'servus', 'moin', 'huhu', 'halo'];
         const lower = text.toLowerCase().trim();
@@ -461,11 +462,8 @@
     }
 
     async function handleUserQuestion(question) {
-        resetWisp();
-        // WICHTIG: Laufende Sprachausgabe sauber stoppen, bevor neue startet
-        clearWatchdog();
-        if (synth) synth.cancel();
-        isSpeaking = false;
+        // Laufende Sprachausgabe sauber beenden (Session-Guard verhindert späte Callbacks)
+        stopSpeaking();
 
         const container = document.getElementById('wispBtn');
         container.className = "wisp-stage thinking";
@@ -528,8 +526,7 @@ REGELN FÜR DIE ANTWORT:
             speakAnswerSafari(answer);
 
         } catch (err) {
-            // Fehler SICHTBAR machen, damit wir die Ursache sehen
-            const msg = (err && (err.message || err.error?.message)) || JSON.stringify(err);
+            const msg = (err && (err.message || (err.error && err.error.message))) || JSON.stringify(err);
             updateStatus(`⚠️ KI-Fehler: ${msg}<br><small>Versuche es nochmal – oder Seite neu laden.</small>`);
             resetWisp();
         }
@@ -539,14 +536,18 @@ REGELN FÜR DIE ANTWORT:
         document.getElementById('statusText').innerHTML = text;
     }
 
+    // NEUE SPRACH-ENGINE: Eine einzige Utterance pro Antwort.
+    // Kein Satz-Chaining mehr (das war die Ursache für doppelte Callbacks und übersprungene Sätze).
     function speakAnswerSafari(text) {
-        if (!synth) return;
+        if (!synth) { resetWisp(); return; }
 
+        const session = ++speakSession;
         clearWatchdog();
         synth.cancel();
 
-        // Safari braucht nach cancel() eine kurze Pause, sonst verschluckt er die Queue
         setTimeout(() => {
+            if (session !== speakSession) return; // Inzwischen wurde eine neue Frage gestellt
+
             synth.resume();
             isSpeaking = true;
 
@@ -554,54 +555,30 @@ REGELN FÜR DIE ANTWORT:
             container.className = "wisp-stage speaking";
             document.getElementById('wispLabel').innerText = "Liest vor...";
 
-            const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-            let index = 0;
+            const utterance = new SpeechSynthesisUtterance(text);
+            applyChildVoice(utterance);
 
-            function next() {
-                index++;
-                speakSentence();
-            }
-
-            function speakSentence() {
+            const finish = () => {
+                if (session !== speakSession) return; // Stale Callback ignorieren
                 clearWatchdog();
+                isSpeaking = false;
+                resetWisp();
+            };
 
-                if (index >= sentences.length || !isSpeaking) {
-                    isSpeaking = false;
-                    resetWisp();
-                    return;
+            utterance.onend = finish;
+            utterance.onerror = finish;
+
+            synth.speak(utterance);
+
+            // Watchdog NUR als Notfall-Reset, mit großem Puffer (nie mitten im Satz!)
+            const estimatedMs = Math.max(10000, text.length * 180);
+            speakWatchdog = setTimeout(() => {
+                if (session === speakSession && isSpeaking) {
+                    synth.cancel();
+                    finish();
                 }
-
-                const sentenceText = sentences[index].trim();
-                if (!sentenceText) { next(); return; }
-
-                const utterance = new SpeechSynthesisUtterance(sentenceText);
-                applyChildVoice(utterance, (index % 3) * 0.05);
-
-                utterance.onend = () => {
-                    clearWatchdog();
-                    setTimeout(next, 120);
-                };
-                utterance.onerror = () => {
-                    clearWatchdog();
-                    next();
-                };
-
-                synth.resume();
-                synth.speak(utterance);
-
-                // WATCHDOG: Falls Safari onend nicht feuert (bekannter Bug!),
-                // springen wir nach geschätzter Satzlänge automatisch weiter.
-                const estimatedMs = Math.max(5000, sentenceText.length * 150);
-                speakWatchdog = setTimeout(() => {
-                    if (isSpeaking) {
-                        synth.cancel();
-                        next();
-                    }
-                }, estimatedMs + 3000);
-            }
-
-            speakSentence();
-        }, 200);
+            }, estimatedMs + 5000);
+        }, 250);
     }
 
     document.addEventListener('touchstart', forceUnlockSafari, { once: true });
