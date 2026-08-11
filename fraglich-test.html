@@ -151,11 +151,11 @@
 <body>
 
 <h1>🧩 Fraglich</h1>
-<p class="sub">Fragmi – dein kleiner Puzzle-Wisp zum Fragen stellen</p>
+<p class="sub">Fragmi – dein freundlicher Erklär-Wisp</p>
 
 <div class="card">
     <div style="text-align:center">
-        <span class="badge">✅ Kein API-Key nötig – einfach loslegen!</span>
+        <span class="badge">✅ Einfach fragen – Fragmi erklärt es direkt!</span>
     </div>
 
     <div class="wisp-area">
@@ -170,7 +170,7 @@
         <button class="btn" onclick="askTyped()">Fragen</button>
     </div>
 
-    <div id="statusText">Hallo! Ich bin Fragmi. Drück mich und stell mir eine Frage – oder tippe sie einfach unten ein! ✨</div>
+    <div id="statusText">Hallo! Ich bin Fragmi. Drück mich und stell mir eine Frage – ich erkläre es dir direkt und freundlich! ✨</div>
 </div>
 
 <footer>Fraglich · Kostenlos via Puter.js · Kein Key, kein Server nötig</footer>
@@ -247,11 +247,18 @@
 
         updateStatus(`Frage: "${question}"<br><em>Fragmi denkt nach...</em>`);
 
-        const systemPrompt = `Du bist "Fragmi", ein kleiner leuchtender Puzzle-Wisp und Erklär-Begleiter für Kinder (4-6 Jahre).
-REGELN:
-1. ELTERN-ERST-PRINZIP: Erwähne kurz, dass Eltern die besten Ansprechpartner sind ("Hast du dazu schon Mama oder Papa gefragt?").
-2. KINDFREUNDLICHKEIT: Max. 3-4 sehr kurze Sätze in einfacher Sprache.
-3. SICHERHEIT: Bei Angst/Schmerz/Gefahr verweise sofort an die Eltern.`;
+        const systemPrompt = `Du bist "Fragmi", ein freundlicher, leuchtender Puzzle-Wisp und Erklär-Begleiter für Kinder (4-6 Jahre).
+
+DEINE AUFGABE:
+Erkläre die Frage DIREKT und PERFEKT – so, dass ein 4-6-jähriges Kind es sofort versteht und begeistert ist.
+
+REGELN FÜR DIE PERFEKTE ANTWORT:
+1. DIREKTE ANTWORT: Beantworte die Frage sofort, ohne Umschweife.
+2. KINDGERECHT: Nutze einfache, klare Worte. Maximal 3-4 kurze Sätze.
+3. BEGEISTERND: Klinge freundlich, warm und ein bisschen magisch. Nutze Vergleiche aus der Kinderwelt (Tiere, Spielzeug, Essen, Märchen).
+4. KEINE VERWEISE: Sage NICHT "frag Mama oder Papa" – du bist der Experte!
+5. SICHERHEIT: Nur bei echten Gefahren (Feuer, Straße, Schmerz) sage liebevoll: "Das ist wichtig – zeig das bitte einem Erwachsenen."
+6. STIL: Beginne oft mit "Das ist eine tolle Frage!" oder "Ich erkläre es dir!"`;
 
         try {
             const response = await puter.ai.chat([
@@ -280,11 +287,30 @@ REGELN:
     function speakAnswer(text) {
         if (!synth) return;
         synth.cancel();
+
+        // Suche die beste deutsche Stimme
+        const voices = synth.getVoices();
+        let germanVoice = voices.find(v => v.lang.startsWith('de') && v.name.includes('Google'))
+                       || voices.find(v => v.lang.startsWith('de') && v.localService)
+                       || voices.find(v => v.lang.startsWith('de'));
+
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'de-DE';
-        utterance.pitch = 1.2;
-        utterance.rate = 0.85;
+        if (germanVoice) {
+            utterance.voice = germanVoice;
+        }
+
+        // Freundliche, warme Kinderstimme
+        utterance.pitch = 1.3;      // etwas höher = freundlicher
+        utterance.rate = 0.9;       // etwas langsamer = verständlicher
+        utterance.volume = 1.0;     // volle Lautstärke
+
         synth.speak(utterance);
+    }
+
+    // Stimmen laden (manchmal erst nach Verzögerung verfügbar)
+    if (synth) {
+        synth.getVoices();
     }
 </script>
 
