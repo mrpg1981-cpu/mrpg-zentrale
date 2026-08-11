@@ -91,6 +91,11 @@
         border-color: #ffd166;
         box-shadow: 0 0 45px rgba(255,209,102,.6);
     }
+    #wispBtn.speaking {
+        border-color: #3fb950;
+        box-shadow: 0 0 45px rgba(63,185,80,.7);
+        animation: pulse 1s infinite;
+    }
     @keyframes pulse {
         0%, 100% { transform: scale(1); }
         50% { transform: scale(1.08); }
@@ -146,15 +151,6 @@
         font-size: 0.75rem;
         text-align: center;
     }
-    .speak-indicator {
-        display: inline-block;
-        margin-left: 8px;
-        animation: speakPulse 1s infinite;
-    }
-    @keyframes speakPulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
 </style>
 </head>
 <body>
@@ -164,7 +160,7 @@
 
 <div class="card">
     <div style="text-align:center">
-        <span class="badge">🔊 Fragmi erklärt alles ausführlich und liest es vor!</span>
+        <span class="badge">🔊 Fragmi liest dir alles laut vor!</span>
     </div>
 
     <div class="wisp-area">
@@ -179,7 +175,7 @@
         <button class="btn" onclick="askTyped()">Fragen</button>
     </div>
 
-    <div id="statusText">Hallo! Ich bin Fragmi. Drück mich und stell mir eine Frage – ich erkläre dir alles genau und lese es laut vor! 🔊✨</div>
+    <div id="statusText">Hallo! Ich bin Fragmi. Drück mich und stell mir eine Frage – ich erkläre dir alles und lese es dir laut vor! 🔊✨</div>
 </div>
 
 <footer>Fraglich · Kostenlos via Puter.js · Kein Key, kein Server nötig</footer>
@@ -188,6 +184,7 @@
     let isListening = false;
     let recognition;
     let synth = window.speechSynthesis;
+    let isSpeaking = false;
 
     function loadVoices() {
         if (synth) synth.getVoices();
@@ -218,6 +215,15 @@
 
     function toggleListening() {
         loadVoices();
+
+        // Wenn gerade vorgelesen wird: Stopp
+        if (isSpeaking) {
+            synth.cancel();
+            isSpeaking = false;
+            resetWisp();
+            updateStatus("Okay, ich bin still! Drück mich für eine neue Frage. 🧩");
+            return;
+        }
 
         if (!isListening) {
             isListening = true;
@@ -251,7 +257,7 @@
     function resetWisp() {
         isListening = false;
         const wisp = document.getElementById('wispBtn');
-        wisp.classList.remove('listening', 'thinking');
+        wisp.classList.remove('listening', 'thinking', 'speaking');
         document.getElementById('wispIcon').innerText = "🧩";
         document.getElementById('wispLabel').innerText = "DRÜCKEN";
     }
@@ -263,7 +269,7 @@
         document.getElementById('wispIcon').innerText = "✨";
         document.getElementById('wispLabel').innerText = "DENKT...";
 
-        updateStatus(`Frage: "${question}"<br><em>Fragmi denkt nach...</em>`);
+        updateStatus(`<em>Fragmi denkt nach...</em>`);
 
         const systemPrompt = `Du bist "Fragmi", ein freundlicher, leuchtender Puzzle-Wisp und Erklär-Begleiter für Kinder (4-6 Jahre).
 
@@ -277,7 +283,8 @@ REGELN FÜR DIE PERFEKTE ANTWORT:
 4. BEGEISTERND: Freundlich, warm und ein bisschen magisch.
 5. NIEMALS Eltern erwähnen: Sage NIEMALS "frag Mama oder Papa" oder ähnliches. Du bist der Experte und antwortest immer selbst!
 6. SICHERHEIT: Nur bei echten Gefahren für das Kind (z.B. Feuer, Verkehr) erkläre kurz und liebevoll, warum man vorsichtig sein muss.
-7. STIL: Beginne mit "Das ist eine tolle Frage!" oder "Ich erkläre es dir genau!"`;
+7. STIL: Beginne mit "Das ist eine tolle Frage!" oder "Ich erkläre es dir genau!"
+8. WICHTIG: Schreibe NUR reinen Text ohne Emojis, ohne Sternchen, ohne Markdown – der Text wird vorgelesen!`;
 
         try {
             const response = await puter.ai.chat([
@@ -285,17 +292,17 @@ REGELN FÜR DIE PERFEKTE ANTWORT:
                 { role: 'user', content: question }
             ], { model: 'gpt-4o-mini' });
 
-            const answer = response?.message?.content || String(response);
+            let answer = response?.message?.content || String(response);
 
-            updateStatus(`<strong>Fragmi sagt:</strong><br>${answer}<span class="speak-indicator">🔊</span>`);
+            // Text für Sprachausgabe säubern (Markdown, Emojis entfernen)
+            answer = answer.replace(/[*_#`]/g, '').trim();
+
+            updateStatus(`<strong>Fragmi sagt:</strong><br>${answer}`);
             speakAnswer(answer);
 
         } catch (err) {
             updateStatus(`Oh je, Fehler: ${err.message || 'Keine Verbindung! Versuch es gleich nochmal.'}`);
-        } finally {
-            wisp.classList.remove('thinking');
-            document.getElementById('wispIcon').innerText = "🧩";
-            document.getElementById('wispLabel').innerText = "DRÜCKEN";
+            resetWisp();
         }
     }
 
@@ -305,12 +312,19 @@ REGELN FÜR DIE PERFEKTE ANTWORT:
 
     function speakAnswer(text) {
         if (!synth) {
-            updateStatus("Sprachausgabe wird auf diesem Gerät nicht unterstützt.");
             return;
         }
 
         synth.cancel();
+        isSpeaking = true;
 
+        const wisp = document.getElementById('wispBtn');
+        wisp.classList.remove('thinking');
+        wisp.classList.add('speaking');
+        document.getElementById('wispIcon').innerText = "🔊";
+        document.getElementById('wispLabel').innerText = "LEST VOR...";
+
+        // Beste deutsche Stimme finden
         const voices = synth.getVoices();
         let germanVoice = voices.find(v => v.lang.startsWith('de') && v.name.includes('Google'))
                        || voices.find(v => v.lang.startsWith('de') && v.name.includes('Anna'))
@@ -318,30 +332,39 @@ REGELN FÜR DIE PERFEKTE ANTWORT:
                        || voices.find(v => v.lang.startsWith('de') && v.localService)
                        || voices.find(v => v.lang.startsWith('de'));
 
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'de-DE';
+        // iPad-Fix: Text in Sätze aufteilen (Safari bricht lange Texte ab)
+        const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+        let index = 0;
 
-        if (germanVoice) {
-            utterance.voice = germanVoice;
+        function speakNext() {
+            if (index >= sentences.length || !isSpeaking) {
+                isSpeaking = false;
+                resetWisp();
+                return;
+            }
+
+            const utterance = new SpeechSynthesisUtterance(sentences[index].trim());
+            utterance.lang = 'de-DE';
+            if (germanVoice) utterance.voice = germanVoice;
+            utterance.pitch = 1.3;
+            utterance.rate = 0.9;
+            utterance.volume = 1.0;
+
+            utterance.onend = () => {
+                index++;
+                speakNext();
+            };
+
+            utterance.onerror = () => {
+                index++;
+                speakNext();
+            };
+
+            synth.speak(utterance);
         }
 
-        utterance.pitch = 1.3;
-        utterance.rate = 0.9;
-        utterance.volume = 1.0;
-
-        utterance.onstart = () => {
-            const status = document.getElementById('statusText');
-            if (!status.innerHTML.includes('🔊')) {
-                status.innerHTML += '<span class="speak-indicator">🔊</span>';
-            }
-        };
-
-        utterance.onend = () => {
-            const indicator = document.querySelector('.speak-indicator');
-            if (indicator) indicator.remove();
-        };
-
-        synth.speak(utterance);
+        // Kleine Verzögerung nach cancel() – wichtig für iPad
+        setTimeout(speakNext, 150);
     }
 
     document.addEventListener('touchstart', loadVoices, { once: true });
