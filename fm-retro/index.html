@@ -48,8 +48,12 @@ function num(t,d,cb){ask(t+'<br><input id="numin" type="number" value="'+d+'">',
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 // ===== Stammdaten =====
-const LIGA1=[["FC Bayern München",92],["Borussia Dortmund",86],["Bayer Leverkusen",84],["RB Leipzig",83],["VfB Stuttgart",78],["Eintracht Frankfurt",77],["SC Freiburg",74],["VfL Wolfsburg",74],["Borussia M'gladbach",73],["TSG Hoffenheim",72],["1. FC Union Berlin",71],["Werder Bremen",71],["1. FSV Mainz 05",70],["FC Augsburg",69],["1. FC Köln",68],["Hamburger SV",68],["FC St. Pauli",66],["1. FC Heidenheim",65]];
-const LIGA2=[["Hertha BSC",66],["FC Schalke 04",66],["Fortuna Düsseldorf",64],["Hannover 96",64],["1. FC Kaiserslautern",63],["1. FC Nürnberg",62],["Karlsruher SC",62],["SC Paderborn 07",61],["SV Darmstadt 98",61],["Holstein Kiel",61],["VfL Bochum",62],["SpVgg Greuther Fürth",59],["Eintracht Braunschweig",58],["Hansa Rostock",58],["Arminia Bielefeld",59],["1. FC Magdeburg",60],["SV Elversberg",57],["Preußen Münster",56]];
+// Saison 2026/27 (Stand: September 2026)
+const LIGA1=[["FC Bayern München",92],["Borussia Dortmund",86],["Bayer 04 Leverkusen",84],["RB Leipzig",83],["VfB Stuttgart",80],["Eintracht Frankfurt",79],["TSG Hoffenheim",78],["SC Freiburg",76],["Borussia Mönchengladbach",73],["1. FSV Mainz 05",72],["FC Augsburg",71],["1. FC Union Berlin",71],["SV Werder Bremen",71],["Hamburger SV",70],["1. FC Köln",70],["FC Schalke 04",69],["SV Elversberg",66],["SC Paderborn 07",66]];
+const LIGA2=[["VfL Wolfsburg",70],["1. FC Heidenheim",67],["FC St. Pauli",67],["Hertha BSC",66],["1. FC Kaiserslautern",64],["VfL Bochum",64],["Hannover 96",64],["1. FC Nürnberg",63],["Holstein Kiel",63],["SV Darmstadt 98",63],["1. FC Magdeburg",62],["Arminia Bielefeld",62],["Karlsruher SC",62],["SpVgg Greuther Fürth",60],["Dynamo Dresden",60],["Eintracht Braunschweig",59],["Energie Cottbus",59],["VfL Osnabrück",58]];
+const LIGA3=[["Fortuna Düsseldorf",60],["FC Hansa Rostock",58],["MSV Duisburg",57],["Preußen Münster",57],["Rot-Weiss Essen",56],["1. FC Saarbrücken",56],["Alemannia Aachen",56],["Jahn Regensburg",56],["SV Wehen Wiesbaden",56],["SV Waldhof Mannheim",55],["FC Ingolstadt 04",55],["FC Viktoria Köln",54],["SC Verl",54],["TSG Hoffenheim II",52],["VfB Stuttgart II",52],["FC Würzburger Kickers",52],["SV Meppen",52],["SG Sonnenhof Großaspach",50],["SC Fortuna Köln",50],["TSV Havelse",49]];
+const REGIO=[["Kickers Offenbach",51],["Rot-Weiß Oberhausen",50],["1. FC Lok Leipzig",50],["Chemnitzer FC",50],["FC Carl Zeiss Jena",51],["Wuppertaler SV",48],["SV Babelsberg 03",47],["TSV 1860 München",54]];
+const LN={1:"1. Bundesliga",2:"2. Bundesliga",3:"3. Liga",4:"Regionalliga"};
 const EUROPA=[["Real Madrid",92],["FC Barcelona",90],["Manchester City",93],["Liverpool FC",90],["Inter Mailand",88],["AC Mailand",85],["Juventus Turin",85],["Paris SG",89],["Ajax Amsterdam",80],["FC Porto",81],["Benfica Lissabon",82],["Celtic Glasgow",76],["Galatasaray",79],["Atlético Madrid",87],["Olympique Lyon",79],["RSC Anderlecht",74],["Dynamo Kiew",75],["Sparta Prag",74]];
 const VN="Andreas Bernd Carsten Dirk Frank Jens Kai Lars Marco Mario Oliver Ralf Sven Thomas Uwe Stefan Jürgen Holger Mehmet Dariusz Jan Timo Lukas Niklas Florian Paul Leon Jonas Felix Emre".split(" ");
 const NN="Müller Schmidt Schneider Fischer Weber Meyer Wagner Becker Schulz Hoffmann Koch Richter Klein Wolf Neumann Braun Zimmermann Krüger Hartmann Lange Werner Krause Lehmann Köhler Kaya Nowak Jansen Berger Vogel Frank Engel Roth".split(" ");
@@ -76,25 +80,24 @@ function mkPlayer(pos,base,young){const age=young?rnd(16,18):rnd(18,34);const st
 function val(p){return Math.max(50000,Math.round(Math.pow(p.st,3)*(p.age<24?14:p.age>30?6:10)/1000)*1000)}
 function mkTeam(n,s,i,lg){const sq=[];[3,8,8,5].forEach((c,pi)=>{for(let k=0;k<c;k++)sq.push(mkPlayer(POS[pi],s))});
  return{id:i,name:n,lg,str:s,squad:sq,form:"4-4-2",style:"normal",press:"mittel",hard:"normal",offside:false,cap:null,pen:null,
- money:s*s*2500,stadium:(lg===1?15000:8000)+s*450,price:lg===1?25:18,fans:s*(lg===1?500:300),pts:0,gf:0,ga:0,w:0,d:0,l:0}}
-function newGame(){const tpl=tplLoad();const l1=LIGA1.map((c,i)=>tpl&&tpl.clubs[i]?[tpl.clubs[i].name,c[1]]:c),l2=LIGA2.map((c,i)=>tpl&&tpl.clubs[18+i]?[tpl.clubs[18+i].name,c[1]]:c);
- const all=l1.concat(l2);
- ask("<b>Neues Spiel – Verein wählen</b><br><span class=dim>1. Bundesliga oben, 2. Bundesliga unten</span>",all.map((c,i)=>[(i<18?"":"2. Liga · ")+c[0]+" ("+c[1]+")",()=>askName(i,all,tpl)]))}
+ money:s*s*(lg===1?2500:lg===2?1500:800),stadium:({1:15000,2:8000,3:4000,4:2000}[lg]||15000)+s*450,price:{1:25,2:18,3:14,4:10}[lg]||25,fans:s*({1:500,2:300,3:160,4:80}[lg]||500),pts:0,gf:0,ga:0,w:0,d:0,l:0}}
+function newGame(){const tpl=tplLoad();const all=[...LIGA1.map(c=>[...c,1]),...LIGA2.map(c=>[...c,2]),...LIGA3.map(c=>[...c,3]),...REGIO.map(c=>[...c,4])].map((c,i)=>tpl&&tpl.clubs[i]&&tpl.clubs[i].name?[tpl.clubs[i].name,c[1],c[2]]:c);
+ ask("<b>Neues Spiel – Verein wählen</b><br><span class=dim>Alle Vereine der 1., 2. und 3. Liga 2026/27</span>",all.filter(c=>c[2]<4).map((c,i)=>[LN[c[2]]+" · "+c[0]+" ("+c[1]+")",()=>askName(i,all,tpl)]))}
 function askName(me,all,tpl){ask('Dein Managername:<br><input id="mname" value="'+esc((G&&G.mgr&&G.mgr.name)||"Manager")+'">',[["Los geht's",()=>startGame(me,all,tpl,document.getElementById("mname").value||"Manager")]])}
 function startGame(me,all,tpl,mname){const set=Object.assign({},DEFAULTS,G&&G.set);
- const teams=all.map((c,i)=>{const t=mkTeam(c[0],c[1],i,i<18?1:2);if(tpl&&tpl.clubs[i])tpl.clubs[i].players.forEach((n,k)=>{if(t.squad[k]&&n)t.squad[k].name=n});return t});
- G={set,season:1997,md:0,me,teams,fix:{},news:[],board:60,fansMood:60,mgr:{name:mname,rep:40,career:[]},
+ const teams=all.map((c,i)=>{const t=mkTeam(c[0],c[1],i,c[2]);if(tpl&&tpl.clubs[i])tpl.clubs[i].players.forEach((n,k)=>{if(t.squad[k]&&n)t.squad[k].name=n});return t});
+ G={set,season:2026,md:0,me,teams,fix:{},news:[],board:60,fansMood:60,mgr:{name:mname,rep:40,career:[]},
  trainer:{skill:rnd(40,70),wage:30000},training:"Ausgewogen",youth:1,merch:1,camp:"Kein",sponsor:null,banners:[],loans:[],stad:{},build:null,
  log:[],cup:true,cupRound:0,euro:false,euroRound:0,history:[],last:null,market:[],xi:null,euroNext:[0,1,2,3],weather:"Sonne"};
  G.euro=S().euro&&teams[me].lg===1&&[...teams].filter(t=>t.lg===1).sort((a,b)=>b.str-a.str).slice(0,4).some(t=>t.id===me);
  mkFix();genMarket();news("Willkommen, "+esc(mname)+"! Du übernimmst "+esc(my().name)+". Ziel: Platz "+aim()+".");
  offerSponsors();offerBanners();go("büro")}
-function schedule(ids){const r=[];let a=ids.slice();for(let d=0;d<17;d++){const m=[];for(let i=0;i<9;i++){const h=a[i],g=a[17-i];m.push(d%2?[g,h]:[h,g])}r.push(m);a=[a[0],a[17],...a.slice(1,17)]}
+function schedule(ids){const r=[],n=ids.length;let a=ids.slice();for(let d=0;d<n-1;d++){const m=[];for(let i=0;i<n/2;i++){const h=a[i],g=a[n-1-i];m.push(d%2?[g,h]:[h,g])}r.push(m);a=[a[0],a[n-1],...a.slice(1,n-1)]}
  return r.concat(r.map(md=>md.map(([h,g])=>[g,h])))}
-function mkFix(){[1,2].forEach(l=>G.fix[l]=schedule(G.teams.filter(t=>t.lg===l).map(t=>t.id).sort(()=>Math.random()-.5)))}
+function mkFix(){[1,2,3].forEach(l=>G.fix[l]=schedule(G.teams.filter(t=>t.lg===l).map(t=>t.id).sort(()=>Math.random()-.5)))}
 const my=()=>G.teams[G.me],T=id=>G.teams[id];
 function news(t){G.news.unshift("<b>"+(G.md+1)+". ST</b> "+t);G.news=G.news.slice(0,50)}
-function aim(){const t=my();if(t.lg===2)return t.str>62?3:9;return clamp(Math.round(19-t.str/5.5),1,15)}
+function aim(){const t=my();if(t.lg===2)return t.str>64?3:9;if(t.lg===3)return t.str>56?3:10;if(t.lg===4)return 1;return clamp(Math.round(19-t.str/5.5),1,15)}
 
 // ===== Aufstellung & Stärke =====
 function avail(p){return!p.inj&&!p.sus&&!p.nat}
@@ -134,10 +137,10 @@ function book(k,v){G.log.push([k,Math.round(v)]);G.log=G.log.slice(-120)}
 
 // ===== Spieltag =====
 function playDay(){if(G.md>=34)return endSeason();const t=my();G.weather=S().weather?pick(["Sonne","Sonne","Sonne","Regen","Regen",G.md<6||G.md>28?"Sonne":"Schnee"]):"Sonne";
- const res={1:[],2:[]};let mine=null;
- [1,2].forEach(l=>{if(l===2&&!S().liga2&&t.lg!==2)return;G.fix[l][G.md].forEach(([h,g])=>{let w=G.weather;
+ const res={};let mine=null;
+ [1,2,3].forEach(l=>{if(l>1&&!S().liga2&&t.lg!==l)return;res[l]=[];rounds(l,G.md).forEach(rd=>G.fix[l][rd].forEach(([h,g])=>{let w=G.weather;
   if(w==="Schnee"&&h===G.me&&!G.stad.heat&&Math.random()<.4){news("Spielausfall wegen Schnee! Das Spiel wird mit 0:0 gewertet – nächstes Mal hilft eine Rasenheizung.");w="Sonne"}
-  const r=sim(T(h),T(g),{league:true,weather:w});res[l].push(r);if(h===G.me||g===G.me)mine=r;if(h===G.me)r.gate=gate(1,w)})});
+  const r=sim(T(h),T(g),{league:true,weather:w});res[l].push(r);if(h===G.me||g===G.me)mine=r;if(h===G.me)r.gate=gate(1,w)}))});
  const extra=[];if(S().cup&&G.cup&&CUPMD.includes(G.md))extra.push(cupRound());if(S().euro&&G.euro&&EUROMD.includes(G.md))extra.push(euroRound());
  if(mine){const won=(mine.h===G.me&&mine.sh>mine.sa)||(mine.g===G.me&&mine.sa>mine.sh),lost=(mine.h===G.me&&mine.sh<mine.sa)||(mine.g===G.me&&mine.sa<mine.sh);
   G.board=clamp(G.board+(won?3:lost?-4:0),0,100);G.fansMood=clamp(G.fansMood+(won?4:lost?-4:0),10,100);G.mgr.rep=clamp(G.mgr.rep+(won?1:lost?-1:0),0,100);
@@ -161,7 +164,7 @@ function euroRound(){G.euroRound++;if(!G.stad.light){G.euro=false;news("Ohne Flu
 function weekly(){const t=my(),m=DIFF[S().diff].money;const wages=t.squad.reduce((a,p)=>a+p.wage,0)/4+G.trainer.wage/4;t.money-=wages;book("Gehälter",-wages);
  if(G.sponsor){t.money+=G.sponsor.pay*m/34;book("Trikotsponsor",G.sponsor.pay*m/34)}
  G.banners.forEach(b=>{t.money+=b.pay*m/34});if(G.banners.length)book("Werbebanden",G.banners.reduce((a,b)=>a+b.pay,0)*m/34);
- const tv=(t.lg===1?250000+(18-rank(G.me))*20000:90000)*m;t.money+=tv;book("TV-Gelder",tv);
+ const tv=({1:250000+(18-rank(G.me))*20000,2:90000,3:30000,4:5000}[t.lg])*m;t.money+=tv;book("TV-Gelder",tv);
  const merch=G.merch*t.fans*G.fansMood/30*m;t.money+=merch;book("Fanartikel",merch);
  if(CAMPS[G.camp][0]){t.money-=CAMPS[G.camp][0];book("Trainingslager",-CAMPS[G.camp][0])}
  G.loans.forEach(l=>{const i=l.amt*0.08/34;t.money-=i;book("Kreditzinsen",-i)});
@@ -174,6 +177,7 @@ function weekly(){const t=my(),m=DIFF[S().diff].money;const wages=t.squad.reduce
   if(p.age<29&&p.st<p.pot&&Math.random()<0.08*mod)p.st++;if(p.age>31&&Math.random()<0.05)p.st--;
   p.form=clamp(p.form+rnd(-1,1)+(me&&tr==="Locker"?1:0)+(p.char==="Launisch"?rnd(-1,1):0),1,10);
   if(me){if(p.benched>3&&p.st>65)p.mor=clamp(p.mor-1,1,10);else if(p.benched===0)p.mor=clamp(p.mor+(Math.random()<.3?1:0),1,10)}}))}
+function rounds(l,md){const n=G.fix[l].length,a=Math.floor(md*n/34),b=Math.floor((md+1)*n/34),r=[];for(let k=a;k<b;k++)r.push(k);return r}
 function rank(id){const t=T(id);return table(t.lg).findIndex(x=>x.id===id)+1}
 function table(lg){return G.teams.filter(t=>t.lg===lg).sort((a,b)=>b.pts-a.pts||(b.gf-b.ga)-(a.gf-a.ga)||b.gf-a.gf)}
 
@@ -195,24 +199,25 @@ function winterBreak(){const t=my(),opps=[pick(EUROPA),pick(LIGA2)];
   ["Ruhe gönnen (Fitness +, Moral +)",()=>{t.squad.forEach(p=>{p.fit=100;p.mor=clamp(p.mor+1,1,10)})}]]);
  news("Winterpause – Zeit für Transfers und Trainingslager.")}
 function fired(){G.mgr.career.push(G.season+": entlassen bei "+my().name);G.history.push(G.season+": Entlassung bei "+my().name);
- const offers=S().jobs?G.teams.filter(t=>t.id!==G.me&&t.str<my().str+2).sort(()=>Math.random()-.5).slice(0,G.mgr.rep>25?3:1):[];
+ const offers=S().jobs?G.teams.filter(t=>t.id!==G.me&&t.lg<4&&t.str<my().str+2).sort(()=>Math.random()-.5).slice(0,G.mgr.rep>25?3:1):[];
  if(!offers.length)return say("Der Vorstand hat dich entlassen – kein Verein will dich. Game over.",newGame);
- ask("<b>Entlassen!</b> Der Vorstand hat die Geduld verloren.<br>Folgende Vereine bieten dir einen Job an:",offers.map(o=>[o.name+(o.lg===2?" (2. Liga)":""),()=>takeJob(o.id)]).concat([["Aufhören (neues Spiel)",newGame]]))}
+ ask("<b>Entlassen!</b> Der Vorstand hat die Geduld verloren.<br>Folgende Vereine bieten dir einen Job an:",offers.map(o=>[o.name+(o.lg>1?" ("+LN[o.lg]+")":""),()=>takeJob(o.id)]).concat([["Aufhören (neues Spiel)",newGame]]))}
 function takeJob(id){G.me=id;G.board=60;G.fansMood=60;G.xi=null;G.sponsor=null;G.banners=[];G.stad={};G.youth=1;G.merch=1;G.loans=[];G.cup=true;G.euro=false;
  G.mgr.career.push(G.season+": Wechsel zu "+my().name);news("Neuer Job: Du bist jetzt Manager von "+esc(my().name)+".");offerSponsors();offerBanners();go("büro")}
-function jobOffers(){if(!S().jobs||G.mgr.rep<45)return;const better=G.teams.filter(t=>t.id!==G.me&&t.str>my().str&&t.str<=my().str+12+G.mgr.rep/10).sort(()=>Math.random()-.5).slice(0,2);
- if(better.length&&Math.random()<.6)ask("<b>Jobangebot!</b> Dein Ruf ("+G.mgr.rep+") hat sich herumgesprochen.",better.map(o=>["Wechseln zu "+o.name+(o.lg===2?" (2. Liga)":""),()=>takeJob(o.id)]).concat([["Bleiben",()=>{G.board+=5}]]))}
+function jobOffers(){if(!S().jobs||G.mgr.rep<45)return;const better=G.teams.filter(t=>t.id!==G.me&&t.lg<4&&t.str>my().str&&t.str<=my().str+12+G.mgr.rep/10).sort(()=>Math.random()-.5).slice(0,2);
+ if(better.length&&Math.random()<.6)ask("<b>Jobangebot!</b> Dein Ruf ("+G.mgr.rep+") hat sich herumgesprochen.",better.map(o=>["Wechseln zu "+o.name+(o.lg>1?" ("+LN[o.lg]+")":""),()=>takeJob(o.id)]).concat([["Bleiben",()=>{G.board+=5}]]))}
 
 // ===== Saisonende =====
-function endSeason(){const t=my(),r=rank(G.me),lg=t.lg;let msg="<b>Saison "+G.season+"/"+String(G.season+1).slice(2)+" beendet</b> – "+lg+". Liga, Platz "+r+".";
+function endSeason(){const t=my(),r=rank(G.me),lg=t.lg;let msg="<b>Saison "+G.season+"/"+String(G.season+1).slice(2)+" beendet</b> – "+LN[lg]+", Platz "+r+".";
  if(lg===1&&r===1){msg+="<br>🏆 DEUTSCHER MEISTER!";G.history.push(G.season+": Deutscher Meister");t.money+=8000000;G.mgr.rep+=15}
- else G.history.push(G.season+": "+lg+". Liga Platz "+r);
- G.mgr.career.push(G.season+": "+t.name+", "+lg+". Liga Platz "+r);
+ else G.history.push(G.season+": "+LN[lg]+" Platz "+r);
+ G.mgr.career.push(G.season+": "+t.name+", "+LN[lg]+" Platz "+r);
  const diff=aim()-r;G.board=clamp(G.board+diff*4,0,100);G.mgr.rep=clamp(G.mgr.rep+diff*2,0,100);
  const t1=table(1),t2=table(2);G.euroNext=t1.slice(0,4).map(x=>x.id);
- if(S().liga2){const down=t1.slice(15),up=t2.slice(0,3);down.forEach(x=>x.lg=2);up.forEach(x=>x.lg=1);
-  if(down.includes(t)){msg+="<br>Abstieg in die 2. Bundesliga!";G.board-=20}if(up.includes(t)){msg+="<br>🎉 AUFSTIEG in die Bundesliga!";G.board+=20;G.history.push(G.season+": Aufstieg");G.mgr.rep+=8}
-  const d2=t2.slice(15);d2.forEach(x=>{if(x.id!==G.me){x.str=clamp(x.str+rnd(-2,3),50,70)}});}
+ const moves=[];if(S().liga2){const up2=table(2).slice(0,3),down1=t1.slice(15),elig3=table(3).filter(x=>!/ II$/.test(x.name)),up3=elig3.slice(0,3),down2=table(2).slice(15),down3=table(3).slice(16),regio=G.teams.filter(x=>x.lg===4).sort(()=>Math.random()-.5).slice(0,4);
+  down1.forEach(x=>moves.push([x,2]));up2.forEach(x=>moves.push([x,1]));down2.forEach(x=>moves.push([x,3]));up3.forEach(x=>moves.push([x,2]));down3.forEach(x=>moves.push([x,4]));regio.forEach(x=>moves.push([x,3]));
+  moves.forEach(([x,l])=>{if(x===t){if(l<x.lg){msg+="<br>🎉 AUFSTIEG in die "+LN[l]+"!";G.board+=20;G.history.push(G.season+": Aufstieg in die "+LN[l]);G.mgr.rep+=8}else{msg+="<br>Abstieg in die "+LN[l]+"!";G.board-=20}}x.lg=l});
+  if(my().lg===4){msg+="<br>In der Regionalliga ist für dich Schluss.";G.board=0}}
  else if(r>=16){msg+="<br>Abstiegsplatz – der Vorstand zieht Konsequenzen.";G.board=0}
  say(msg,()=>{if(G.board<15)return fired();nextSeason();jobOffers()})}
 function nextSeason(){const t=my();G.season++;G.md=0;G.cupRound=0;G.euroRound=0;G.cup=true;G.camp="Kein";G.xi=null;G.euro=S().euro&&G.euroNext.includes(G.me);
@@ -247,7 +252,7 @@ function scout(){const c=150000;if(my().money<c)return say("Zu wenig Geld für d
 
 // ===== Sponsoren & Finanzen =====
 function offerSponsors(){const s=["Brauerei Kronenbräu","AutoHaus Nord","Telekom-Union","Sparkasse Rhein","Elektro Blitz","Versicherung Merkur","Sportartikel Tempo"],t=my();
- const o=[0,1,2].map(()=>({name:pick(s),pay:Math.round(t.str*t.str*(rnd(250,450))*(t.lg===2?.5:1)/10000)*10000,yrs:rnd(1,3)}));
+ const o=[0,1,2].map(()=>({name:pick(s),pay:Math.round(t.str*t.str*(rnd(250,450))*({1:1,2:.5,3:.25,4:.1}[t.lg])/10000)*10000,yrs:rnd(1,3)}));
  ask("<b>Trikotsponsor wählen</b>",o.map(x=>[x.name+": "+eur(x.pay)+"/Saison, "+x.yrs+" J.",()=>{G.sponsor=x;G.sponsorYrs=x.yrs;news("Neuer Trikotsponsor: "+esc(x.name))}]))}
 function offerBanners(){const n=4+(G.stad.board?2:0),t=my(),firms=["Getränke Hansen","Baumarkt König","Reisebüro Sonne","Zeitung Express","Autoteile Schulz","Bäckerei Korn","Tankstelle Blitz","Möbel Fuchs"];
  G.banners=[];for(let i=0;i<n;i++)G.banners.push({name:pick(firms),pay:Math.round(t.fans*rnd(4,9)/1000)*1000})}
@@ -261,7 +266,7 @@ function upg(k,c){if(my().money<c)return say("Zu wenig Geld.");my().money-=c;G[k
 function hireTrainer(){const s=rnd(35,95),w=s*s*8;ask("Trainer mit Qualität "+s+" verlangt "+eur(w)+"/Monat.",[["Einstellen",()=>{G.trainer={skill:s,wage:w};go("training")}],["Ablehnen"]])}
 
 // ===== Speichern =====
-function save(q){if(!G)return;try{localStorage.setItem("fmretro97",JSON.stringify(G));if(!q)say("Gespeichert!")}catch(e){if(!q)say("Speichern nicht möglich (Browser-Speicher gesperrt).")}}
+function save(q){if(!G)return;try{localStorage.setItem("fmretro2627",JSON.stringify(G));if(!q)say("Gespeichert!")}catch(e){if(!q)say("Speichern nicht möglich (Browser-Speicher gesperrt).")}}
 
 // ===== Editor =====
 function edSaveClub(){const t=T(edClub);const n=document.getElementById("ed-club").value.trim();if(n)t.name=n;
@@ -279,7 +284,7 @@ function edReset(){ask("Gespeicherte Namensvorlage löschen? (Wirkt beim nächst
 // ===== Views =====
 const VIEWS={"büro":"Büro","kader":"Kader","taktik":"Taktik","training":"Training","spieltag":"Spieltag","tabelle":"Tabellen","spielplan":"Spielplan","transfer":"Transfers","finanzen":"Finanzen","stadion":"Stadion","verein":"Vereine","statistik":"Statistik","karriere":"Karriere","editor":"Editor","optionen":"Einstellungen"};
 function go(v,anim){cur=v;if(S().autosave)save(true);const t=my();
- document.getElementById("status").textContent=G.mgr.name+" · "+t.name+" · "+t.lg+". Liga · Saison "+G.season+"/"+String(G.season+1).slice(2)+" · "+(G.md<34?(G.md+1)+". Spieltag":"Saisonende")+" · Platz "+rank(G.me)+" · "+eur(t.money);
+ document.getElementById("status").textContent=G.mgr.name+" · "+t.name+" · "+LN[t.lg]+" · Saison "+G.season+"/"+String(G.season+1).slice(2)+" · "+(G.md<34?(G.md+1)+". Spieltag":"Saisonende")+" · Platz "+rank(G.me)+" · "+eur(t.money);
  document.getElementById("nav").innerHTML=Object.entries(VIEWS).map(([k,n])=>`<button class="${k===cur?"on":""}" onclick="go('${k}')">${n}</button>`).join("")+`<button class="btn big" onclick="playDay()">▶ ${G.md<34?"Spieltag spielen":"Saison beenden"}</button>`;
  document.getElementById("view").innerHTML=R[v]();if(anim&&G.last&&G.last.mine)liveTicker(G.last.mine)}
 function liveTicker(m){const el=document.getElementById("ticker");if(!el)return;if(!S().ticker){el.innerHTML=m.ev.map(e=>"<div>"+esc(e)+"</div>").join("")+"<div>Abpfiff! Endstand "+m.sh+":"+m.sa+"</div>";return}
@@ -290,11 +295,11 @@ const pHead="<tr><th>Pos</th><th>Name</th><th>Alt</th><th>Stä</th><th>Pot</th><
 const bar=(v,c)=>`<div style="background:rgba(0,0,0,.35);height:8px;border-radius:4px;margin:4px 0 8px"><div style="width:${v}%;height:8px;border-radius:4px;background:${c}"></div></div>`;
 const sel=(id,opts,val,on)=>`<select id="${id}" onchange="${on}">${opts.map(o=>`<option ${o==val?"selected":""}>${o}</option>`).join("")}</select>`;
 const chk=(k,label)=>`<label><input type=checkbox id="opt-${k}" ${S()[k]?"checked":""} onchange="G.set.${k}=this.checked;go('optionen')"> ${label}</label><br>`;
-function nextMatch(){if(G.md>=34)return"Saison beendet";const m=G.fix[my().lg][G.md].find(x=>x.includes(G.me));let s=esc(T(m[0]).name)+" – "+esc(T(m[1]).name);
+function nextMatch(){if(G.md>=34)return"Saison beendet";const rr=rounds(my().lg,G.md);const m=G.fix[my().lg][rr[rr.length-1]].find(x=>x.includes(G.me));let s=esc(T(m[0]).name)+" – "+esc(T(m[1]).name);
  if(S().cup&&G.cup&&CUPMD.includes(G.md))s+="<br><span class=dim>+ DFB-Pokal diese Woche</span>";if(S().euro&&G.euro&&EUROMD.includes(G.md))s+="<br><span class=dim>+ Europapokal diese Woche</span>";return s}
 const R={
 "büro":()=>{const t=my();return`<div class="grid"><div class="box"><h2>Vorstand</h2>Vertrauen: ${G.board}%${bar(G.board,G.board<30?"var(--bad)":"var(--ok)")}Fans: ${G.fansMood}%${bar(G.fansMood,"var(--acc2)")}Ruf als Manager: ${G.mgr.rep}${bar(G.mgr.rep,"var(--acc)")}
-<p class=dim>Saisonziel: ${t.lg}. Liga Platz ${aim()} oder besser</p></div><div class="box"><h2>Nächstes Spiel</h2>${nextMatch()}<p class=dim>Wettbewerbe: Liga${G.cup&&S().cup?" · DFB-Pokal":""}${G.euro&&S().euro?" · Europapokal":""}</p></div>
+<p class=dim>Saisonziel: ${LN[t.lg]} Platz ${aim()} oder besser</p></div><div class="box"><h2>Nächstes Spiel</h2>${nextMatch()}<p class=dim>Wettbewerbe: Liga${G.cup&&S().cup?" · DFB-Pokal":""}${G.euro&&S().euro?" · Europapokal":""}</p></div>
 <div class="box"><h2>Erfolge</h2>${G.history.slice(-10).map(esc).join("<br>")||"<span class=dim>noch keine</span>"}</div></div><div class="box"><h2>Nachrichten</h2>${G.news.map(n=>"<div>"+n+"</div>").join("")}</div>`},
 "kader":()=>{const t=my();return`<div class="box"><h2>Kader (${t.squad.length}) · © Kapitän · ⚑ will wechseln</h2><table>${pHead}${t.squad.slice().sort((a,b)=>POS.indexOf(a.pos)-POS.indexOf(b.pos)||b.st-a.st).map(p=>pRow(p,`<button class=btn onclick="sell('${p.id}')">Verkaufen</button> <button class=btn onclick="renew('${p.id}')">Vertrag</button> <button class=btn onclick="release('${p.id}')">Entlassen</button>`)).join("")}</table></div>`},
 "taktik":()=>{const t=my(),xi=lineup(t),manual=!!(G.xi&&xi.length===11&&G.xi.length===11);const names=t.squad.map(p=>p.name);
@@ -316,11 +321,11 @@ const R={
 "spieltag":()=>{if(!G.last||!G.last.mine)return`<div class=box>Noch kein Spieltag gespielt.</div>`;const m=G.last.mine;
  return`<div class="box"><h2>Dein Spiel · Wetter: ${m.weather}</h2><div class=score>${esc(m.hn)} ${m.sh} : ${m.sa} ${esc(m.gn)}</div>${m.gate?'<p class=dim style="text-align:center">'+m.gate.toLocaleString("de-DE")+" Zuschauer</p>":""}<div id=ticker></div></div>
  ${G.last.extra.filter(Boolean).map(r=>`<div class=box><h2>${r.title}</h2><div class=score style="font-size:20px">${esc(r.hn)} ${r.sh} : ${r.sa} ${esc(r.gn)}</div></div>`).join("")}
- <div class=grid>${[1,2].filter(l=>G.last.res[l].length).map(l=>`<div class="box"><h2>${l}. Liga</h2><table>${G.last.res[l].map(r=>`<tr class="${r===m?"me":""}"><td>${esc(r.hn)}</td><td>${r.sh}:${r.sa}</td><td>${esc(r.gn)}</td></tr>`).join("")}</table></div>`).join("")}</div>`},
-"tabelle":()=>`<div class=box><button class="btn ${tblLg===1?"big":""}" onclick="tblLg=1;go('tabelle')">1. Bundesliga</button> <button class="btn ${tblLg===2?"big":""}" onclick="tblLg=2;go('tabelle')">2. Bundesliga</button></div>
-<div class=box><h2>${tblLg}. Bundesliga</h2><table><tr><th>#</th><th>Verein</th><th>Sp</th><th>S</th><th>U</th><th>N</th><th>Tore</th><th>Diff</th><th>Pkt</th></tr>${table(tblLg).map((t,i)=>`<tr class="${t.id===G.me?"me":""}"><td class="${(tblLg===1?i<4:i<3)?"ok":i>14?"bad":""}">${i+1}</td><td>${esc(t.name)}</td><td>${t.w+t.d+t.l}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf}:${t.ga}</td><td>${t.gf-t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table>
-<p class=dim>${tblLg===1?"Plätze 1–4 Europapokal · 16–18 Abstieg":"Plätze 1–3 Aufstieg · 16–18 Abstieg"}</p></div>`,
-"spielplan":()=>`<div class=box><h2>Spielplan ${my().lg}. Liga</h2><table>${G.fix[my().lg].map((d,i)=>{const m=d.find(x=>x.includes(G.me));return`<tr class="${i===G.md?"me":""}"><td>${i+1}.</td><td>${esc(T(m[0]).name)}</td><td>–</td><td>${esc(T(m[1]).name)}</td><td class=dim>${CUPMD.includes(i)?"Pokal ":""}${EUROMD.includes(i)?"Europa ":""}${i===WINTER?"Winterpause":""}</td></tr>`}).join("")}</table></div>`,
+ <div class=grid>${[1,2,3].filter(l=>G.last.res[l]&&G.last.res[l].length).map(l=>`<div class="box"><h2>${LN[l]}</h2><table>${G.last.res[l].map(r=>`<tr class="${r===m?"me":""}"><td>${esc(r.hn)}</td><td>${r.sh}:${r.sa}</td><td>${esc(r.gn)}</td></tr>`).join("")}</table></div>`).join("")}</div>`},
+"tabelle":()=>`<div class=box>${[1,2,3,4].map(l=>`<button class="btn ${tblLg===l?"big":""}" onclick="tblLg=${l};go('tabelle')">${LN[l]}</button>`).join(" ")}</div>
+<div class=box><h2>${LN[tblLg]}</h2><table><tr><th>#</th><th>Verein</th><th>Sp</th><th>S</th><th>U</th><th>N</th><th>Tore</th><th>Diff</th><th>Pkt</th></tr>${table(tblLg).map((t,i)=>`<tr class="${t.id===G.me?"me":""}"><td class="${tblLg===4?"":(tblLg===1?i<4:i<3)?"ok":i>=(tblLg===3?16:15)?"bad":""}">${i+1}</td><td>${esc(t.name)}</td><td>${t.w+t.d+t.l}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf}:${t.ga}</td><td>${t.gf-t.ga}</td><td><b>${t.pts}</b></td></tr>`).join("")}</table>
+<p class=dim>${{1:"Plätze 1–4 Europapokal · 16–18 Abstieg",2:"Plätze 1–3 Aufstieg · 16–18 Abstieg",3:"Plätze 1–3 Aufstieg (ohne II. Mannschaften) · 17–20 Abstieg",4:"Unterbau: 4 Vereine steigen jede Saison in die 3. Liga auf (nicht simuliert)"}[tblLg]}</p></div>`,
+"spielplan":()=>`<div class=box><h2>Spielplan ${LN[my().lg]}</h2><table>${G.fix[my().lg].map((d,i)=>{const m=d.find(x=>x.includes(G.me));return`<tr class="${rounds(my().lg,G.md).includes(i)?"me":""}"><td>${i+1}.</td><td>${esc(T(m[0]).name)}</td><td>–</td><td>${esc(T(m[1]).name)}</td><td class=dim>${CUPMD.includes(i)?"Pokal ":""}${EUROMD.includes(i)?"Europa ":""}${i===WINTER?"Winterpause":""}</td></tr>`}).join("")}</table></div>`,
 "transfer":()=>`<div class=box><h2>Transfermarkt</h2><p>Kasse: ${eur(my().money)} · <button class=btn onclick="scout()">Scout losschicken (${eur(150000)})</button></p><table>${pHead.replace("<th></th></tr>","<th>Herkunft</th><th></th></tr>")}${G.market.map(p=>pRow(p,`${esc(p.from||"")}</td><td><button class=btn onclick="buy('${p.id}')">Bieten</button>`)).join("")}</table></div>`,
 "finanzen":()=>{const t=my(),sum={};G.log.forEach(([k,v])=>{const key=k.replace(/^(Transfer|Verkauf|Abfindung|Vereinsstrafe) .*/,"$1");sum[key]=(sum[key]||0)+v});
  return`<div class=grid><div class=box><h2>Kontostand</h2><div class=score>${eur(t.money)}</div><p>Gehaltskosten/Monat: ${eur(t.squad.reduce((a,p)=>a+p.wage,0)+G.trainer.wage)}</p><p>Trikotsponsor: ${G.sponsor?esc(G.sponsor.name)+" – "+eur(G.sponsor.pay)+"/Saison":"–"}</p></div>
@@ -334,11 +339,11 @@ const R={
  <div class=box><h2>Ausbauten</h2><table>${Object.entries(STADX).map(([k,[n,c,d]])=>`<tr><td>${n}<br><span class=dim>${d}</span></td><td>${G.stad[k]?'<span class=ok>vorhanden</span>':`<button class=btn onclick="buyX('${k}')">${eur(c)}</button>`}</td></tr>`).join("")}</table></div>
  <div class=box><h2>Fanartikel</h2>Fanshop-Stufe: ${G.merch}<br><br><button class=btn onclick="upg('merch',1500000)">Fanshop ausbauen (${eur(1500000)})</button></div>
  <div class=box><h2>Jugendarbeit</h2>Jugendinternat Stufe: ${G.youth}<br><br><button class=btn onclick="upg('youth',2000000)">Internat ausbauen (${eur(2000000)})</button></div></div>`},
-"verein":()=>`<div class=box><h2>Alle Vereine</h2><table><tr><th>Verein</th><th>Liga</th><th>Stärke</th><th>Formation</th><th>Stadion</th><th>Kader</th></tr>${G.teams.slice().sort((a,b)=>a.lg-b.lg||power(b)-power(a)).map(t=>`<tr class="${t.id===G.me?"me":""}"><td>${esc(t.name)}</td><td>${t.lg}.</td><td>${power(t).toFixed(1)}</td><td>${t.form}</td><td>${t.stadium.toLocaleString("de-DE")}</td><td>${t.squad.length}</td></tr>`).join("")}</table></div>`,
+"verein":()=>`<div class=box><h2>Alle Vereine</h2><table><tr><th>Verein</th><th>Liga</th><th>Stärke</th><th>Formation</th><th>Stadion</th><th>Kader</th></tr>${G.teams.slice().sort((a,b)=>a.lg-b.lg||power(b)-power(a)).map(t=>`<tr class="${t.id===G.me?"me":""}"><td>${esc(t.name)}</td><td>${LN[t.lg]}</td><td>${power(t).toFixed(1)}</td><td>${t.form}</td><td>${t.stadium.toLocaleString("de-DE")}</td><td>${t.squad.length}</td></tr>`).join("")}</table></div>`,
 "statistik":()=>{const all=G.teams.filter(t=>t.lg===my().lg).flatMap(t=>t.squad.map(p=>({...p,club:t.name})));return`<div class=grid><div class=box><h2>Torjägerliste</h2><table>${all.slice().sort((a,b)=>b.goals-a.goals).slice(0,15).map((p,i)=>`<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>${esc(p.club)}</td><td>${p.goals}</td></tr>`).join("")}</table></div>
  <div class=box><h2>Beste Spieler der Liga</h2><table>${all.slice().sort((a,b)=>b.st-a.st).slice(0,15).map((p,i)=>`<tr><td>${i+1}</td><td>${esc(p.name)}</td><td>${esc(p.club)}</td><td>${p.st}</td></tr>`).join("")}</table></div></div>`},
 "karriere":()=>`<div class=grid><div class=box><h2>Manager</h2><b>${esc(G.mgr.name)}</b><br>Ruf: ${G.mgr.rep}${bar(G.mgr.rep,"var(--acc)")}Verein: ${esc(my().name)}</div><div class=box><h2>Laufbahn</h2>${G.mgr.career.map(esc).join("<br>")||"<span class=dim>erste Saison</span>"}</div></div>`,
-"editor":()=>{if(edClub===null)edClub=G.me;const t=T(edClub);return`<div class=box><h2>Vereins- & Spieler-Editor</h2>Verein: <select id="ed-sel" onchange="edClub=+this.value;go('editor')">${G.teams.slice().sort((a,b)=>a.lg-b.lg||a.name.localeCompare(b.name)).map(x=>`<option value="${x.id}" ${x.id===edClub?"selected":""}>${x.lg}. Liga · ${esc(x.name)}</option>`).join("")}</select><br><br>
+"editor":()=>{if(edClub===null)edClub=G.me;const t=T(edClub);return`<div class=box><h2>Vereins- & Spieler-Editor</h2>Verein: <select id="ed-sel" onchange="edClub=+this.value;go('editor')">${G.teams.slice().sort((a,b)=>a.lg-b.lg||a.name.localeCompare(b.name)).map(x=>`<option value="${x.id}" ${x.id===edClub?"selected":""}>${LN[x.lg]} · ${esc(x.name)}</option>`).join("")}</select><br><br>
  Vereinsname: <input id="ed-club" value="${esc(t.name)}" maxlength=40 style="width:260px"></div>
  <div class=box><h2>Spieler (${t.squad.length})</h2><table><tr><th>Name</th><th>Pos</th><th>Alter</th><th>Stärke</th><th>Potenzial</th><th>Typ</th><th></th></tr>${t.squad.map(p=>`<tr><td><input id="ed-n-${p.id}" value="${esc(p.name)}" maxlength=40></td><td>${sel("ed-p-"+p.id,POS,p.pos,"")}</td><td><input id="ed-a-${p.id}" type=number value=${p.age} style="width:60px"></td><td><input id="ed-s-${p.id}" type=number value=${p.st} style="width:60px"></td><td><input id="ed-t-${p.id}" type=number value=${p.pot} style="width:60px"></td><td>${sel("ed-c-"+p.id,CHAR,p.char,"")}</td><td><button class=btn onclick="edDelPlayer('${p.id}')">✕</button></td></tr>`).join("")}</table><br>
  <button class="btn big" onclick="edSaveClub()">Änderungen speichern</button> <button class=btn onclick="edAddPlayer()">Spieler hinzufügen</button> <button class=btn onclick="edRandom()">Zufallsnamen</button></div>
@@ -348,10 +353,10 @@ const R={
  Währung: ${sel("opt-cur",["DM","€"],S().cur,"G.set.cur=this.value;go('optionen')")}<br><br>
  Verletzungen: ${sel("opt-inj",["0","0.5","1","1.5"],String(S().inj),"G.set.inj=+this.value;go('optionen')")} <span class=dim>(Faktor)</span><br><br>${chk("autosave","Automatisch speichern")}</div>
  <div class=box><h2>Live-Ticker</h2>${chk("ticker","Ticker animiert anzeigen")}Tempo: ${sel("opt-speed",["150","300","450","800"],String(S().speed),"G.set.speed=+this.value;go('optionen')")} ms pro Ereignis</div>
- <div class=box><h2>Wettbewerbe & Ereignisse</h2>${chk("liga2","2. Bundesliga mit Auf-/Abstieg")}${chk("cup","DFB-Pokal")}${chk("euro","Europapokal")}${chk("transfers","Transfers")}${chk("press","Pressekonferenzen")}${chk("jobs","Jobangebote anderer Vereine")}${chk("weather","Wetter")}${chk("riots","Fan-Ausschreitungen")}</div>
+ <div class=box><h2>Wettbewerbe & Ereignisse</h2>${chk("liga2","2. und 3. Liga simulieren (Auf-/Abstieg)")}${chk("cup","DFB-Pokal")}${chk("euro","Europapokal")}${chk("transfers","Transfers")}${chk("press","Pressekonferenzen")}${chk("jobs","Jobangebote anderer Vereine")}${chk("weather","Wetter")}${chk("riots","Fan-Ausschreitungen")}</div>
  <div class=box><h2>Spielstand</h2><button class=btn onclick="save()">Jetzt speichern</button> <button class=btn onclick="ask('Neues Spiel starten? Der aktuelle Spielstand geht verloren.',[['Ja, neu starten',newGame],['Abbrechen']])">Neues Spiel</button></div></div>`};
 function toggleXI(id,on){let xi=G.xi||lineup(my()).map(p=>p.id);xi=xi.filter(x=>x!==id);if(on)xi.push(id);G.xi=xi;go("taktik")}
-try{G=JSON.parse(localStorage.getItem("fmretro97"));if(G&&!G.set)G=null}catch(e){G=null}
+try{G=JSON.parse(localStorage.getItem("fmretro2627"));if(G&&!G.set)G=null}catch(e){G=null}
 if(G){G.set=Object.assign({},DEFAULTS,G.set);go("büro")}else{G={set:Object.assign({},DEFAULTS)};newGame()}
 </script>
 </body>
