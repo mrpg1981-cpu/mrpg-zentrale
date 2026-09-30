@@ -4,30 +4,35 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FM Retro 97</title>
-<style>:root{color-scheme:dark}body{background:#0a1a3a}</style>
 <style>
-:root{--bg:#0a1a3a;--panel:#12285a;--line:#2a4a8a;--txt:#e8f0ff;--dim:#8fa6d6;--acc:#ffd23c;--ok:#4cd964;--bad:#ff5a5a}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 "Courier New",monospace}
-header{background:linear-gradient(#1c3c80,#0d2250);border-bottom:3px solid var(--acc);padding:8px 16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-header h1{margin:0;font-size:18px;color:var(--acc);letter-spacing:2px}#status{color:var(--dim);flex:1}
-nav{display:flex;flex-wrap:wrap;gap:4px;padding:8px 16px;background:#0d1f48}
-nav button,.btn{background:var(--panel);color:var(--txt);border:2px outset #3a5aa0;padding:6px 10px;font:inherit;cursor:pointer}
-nav button.on{background:var(--acc);color:#000}.btn.big{background:var(--acc);color:#000;font-weight:bold}
-main{padding:16px;max-width:1100px;margin:auto}
-.box{background:var(--panel);border:2px solid var(--line);padding:12px;margin-bottom:12px;overflow-x:auto}
-h2{margin:0 0 8px;color:var(--acc);font-size:16px}table{border-collapse:collapse;width:100%}
-td,th{padding:3px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{color:var(--dim)}
-tr.me{background:#2b4a1a}.ok{color:var(--ok)}.bad{color:var(--bad)}.dim{color:var(--dim)}
-#ticker{height:260px;overflow-y:auto;background:#000;color:#9f9;padding:8px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
-select,input{background:#000;color:var(--txt);border:1px solid var(--line);font:inherit;padding:3px}
-#modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:16px;z-index:9}
-.mbox{background:var(--panel);border:3px solid var(--acc);padding:16px;max-width:520px;width:100%;max-height:90%;overflow-y:auto}.mbtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
-.score{font-size:28px;text-align:center;color:var(--acc)}
+/* MrPG-Design: Navy-Grund, Glas-Panels, Türkis/Orange-Akzente */
+:root{--bg:#0b1120;--panel:rgba(30,41,59,.7);--line:rgba(255,255,255,.1);--txt:#f8fafc;--dim:#94a3b8;--acc:#38bdf8;--acc2:#f97316;--ok:#4ade80;--bad:#f87171;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);background-image:radial-gradient(circle at 50% 0%,rgba(56,189,248,.15),transparent 45%);background-attachment:fixed;color:var(--txt);font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(11,17,32,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+header h1{margin:0;font-size:17px;font-weight:700;letter-spacing:.5px;background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+#status{color:var(--dim);flex:1 1 100%;order:3;min-width:0;font-size:13px}header h1{flex:1}
+nav{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;max-width:1100px;margin:auto}
+nav button,.btn{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:7px 12px;font:inherit;cursor:pointer;transition:border-color .15s,background .15s}
+nav button:hover,.btn:hover{border-color:var(--acc)}nav button:focus-visible,.btn:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+nav button.on{background:rgba(56,189,248,.18);border-color:var(--acc);color:var(--acc)}
+.btn.big{background:var(--acc2);border-color:var(--acc2);color:#fff;font-weight:600}
+main{padding:8px 16px 24px;max-width:1100px;margin:auto}
+.box{background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;overflow-x:auto;min-width:0}
+h2{margin:0 0 10px;color:var(--acc);font-size:13px;text-transform:uppercase;letter-spacing:1.2px}
+table{border-collapse:collapse;width:100%}td,th{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{color:var(--dim);font-weight:500;font-size:12px}
+tr.me{background:rgba(249,115,22,.14)}.ok{color:var(--ok)}.bad{color:var(--bad)}.dim{color:var(--dim)}
+#ticker{height:260px;overflow-y:auto;background:rgba(0,0,0,.35);border-radius:10px;color:var(--acc);padding:10px;font-family:ui-monospace,Menlo,monospace}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.grid .box{margin:0}.grid{margin-bottom:12px}
+select,input{background:rgba(0,0,0,.35);color:var(--txt);border:1px solid var(--line);border-radius:8px;font:inherit;padding:5px 8px}
+#modal{position:fixed;inset:0;background:rgba(2,6,23,.7);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:16px;z-index:9}
+.mbox{background:#111a2e;border:1px solid var(--acc);border-radius:16px;padding:18px;max-width:520px;width:100%;max-height:90%;overflow-y:auto}.mbtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.score{font-size:28px;font-weight:700;text-align:center;color:var(--txt)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
-<header><h1>⚽ FM RETRO 97</h1><span id="status"></span>
+<header><h1>MrPG · FM Retro 97</h1><span id="status"></span>
 <button class="btn" onclick="save()">Speichern</button><button class="btn" onclick="ask('Neues Spiel starten? Der aktuelle Spielstand geht verloren.',[['Ja, neu starten',newGame],['Abbrechen']])">Neu</button></header>
 <nav id="nav"></nav>
 <main id="view"></main>
@@ -144,9 +149,9 @@ function go(v,anim){cur=v;save(true);const T=my();
 function liveTicker(m){const el=document.getElementById("ticker");if(!el)return;el.innerHTML="";let i=0;const it=setInterval(()=>{if(i>=m.ev.length){el.innerHTML+="<div>Abpfiff! Endstand "+m.sh+":"+m.sa+"</div>";clearInterval(it);return}el.innerHTML+="<div>"+m.ev[i++]+"</div>";el.scrollTop=1e9},450)}
 const pRow=(p,act)=>`<tr><td>${p.pos}</td><td>${p.name}</td><td>${p.age}</td><td>${p.st}</td><td class="dim">${p.pot}</td><td>${p.form}</td><td>${p.fit}%</td><td>${p.inj?'<span class="bad">verl. '+p.inj+'</span>':p.sus?'<span class="bad">gesp.</span>':'<span class="ok">fit</span>'}</td><td>${eur(p.value)}</td><td>${eur(p.wage)}</td><td>${p.contract} J.</td><td>${p.goals}</td><td>${act||""}</td></tr>`;
 const pHead="<tr><th>Pos</th><th>Name</th><th>Alt</th><th>Stä</th><th>Pot</th><th>Form</th><th>Fit</th><th>Status</th><th>Marktwert</th><th>Gehalt</th><th>Vertr.</th><th>Tore</th><th></th></tr>";
-const bar=(v,c)=>`<div style="background:#000;height:12px"><div style="width:${v}%;height:12px;background:${c}"></div></div>`;
+const bar=(v,c)=>`<div style="background:rgba(0,0,0,.35);height:8px;border-radius:4px;margin:4px 0 8px"><div style="width:${v}%;height:8px;border-radius:4px;background:${c}"></div></div>`;
 const R={
-"büro":()=>{const T=my();return`<div class="grid"><div class="box"><h2>Vorstand</h2>Vertrauen: ${G.board}%${bar(G.board,G.board<30?"var(--bad)":"var(--ok)")}<br>Fans: ${G.fansMood}%${bar(G.fansMood,"var(--acc)")}
+"büro":()=>{const T=my();return`<div class="grid"><div class="box"><h2>Vorstand</h2>Vertrauen: ${G.board}%${bar(G.board,G.board<30?"var(--bad)":"var(--ok)")}<br>Fans: ${G.fansMood}%${bar(G.fansMood,"var(--acc2)")}
 <p class="dim">Saisonziel: Platz ${Math.max(1,Math.round(19-T.str/5.5))} oder besser</p></div><div class="box"><h2>Nächstes Spiel</h2>${nextMatch()}</div>
 <div class="box"><h2>Erfolge</h2>${G.history.slice(-10).join("<br>")||"<span class=dim>noch keine</span>"}</div></div><div class="box"><h2>Nachrichten</h2>${G.news.map(n=>"<div>"+n+"</div>").join("")}</div>`},
 "kader":()=>{const T=my();return`<div class="box"><h2>Kader (${T.squad.length})</h2><table>${pHead}${T.squad.slice().sort((a,b)=>POS.indexOf(a.pos)-POS.indexOf(b.pos)||b.st-a.st).map(p=>pRow(p,`<button class=btn onclick="sell('${p.id}')">Verkaufen</button> <button class=btn onclick="renew('${p.id}')">Vertrag</button>`)).join("")}</table></div>`},
