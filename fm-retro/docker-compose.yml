@@ -1,0 +1,7 @@
+services:
+  fm-retro:
+    build: .
+    container_name: fm-retro
+    ports:
+      - "8097:80"
+    restart: unless-stopped
