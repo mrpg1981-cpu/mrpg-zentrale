@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Skills</title><link rel="stylesheet" href="/theme.css">
+<style>
+  body { height: 100vh; display: grid; grid-template-columns: minmax(240px, 320px) 1fr; }
+  .side { border-right: 1px solid var(--line); background: var(--bg-deep); display: flex; flex-direction: column; min-height: 0; }
+  #list { flex: 1; overflow: auto; padding: 6px; }
+  .it { padding: 8px 10px; border-radius: var(--radius); cursor: pointer; }
+  .it:hover, .it.active { background: var(--cyan-soft); }
+  .it.active b { color: var(--cyan); }
+  .it small { display: block; color: var(--muted); margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .edit { overflow: auto; }
+  #body { min-height: 300px; width: 100%; resize: vertical; font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+  .used { display: flex; gap: 6px; flex-wrap: wrap; }
+  @media (max-width: 700px) { body { grid-template-columns: 1fr; grid-template-rows: 40% 60%; } }
+</style></head>
+<body>
+<div class="side">
+  <div class="toolbar"><input class="input grow" id="q" placeholder="Skills suchen …"><button class="btn primary" id="add" title="Neuer Skill">＋</button></div>
+  <div id="list"></div>
+</div>
+<div class="edit" id="edit"></div>
+<script src="/zentrale-sdk.js"></script>
+<script src="/md.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc } = zentrale.util;
+let skills = [], agents = [], cur = null, providers = [];
+
+function intro() {
+  $('#edit').innerHTML = `<div class="page"><h2>✧ Skills</h2>
+    <p>Ein <b>Skill</b> ist eine wiederverwendbare Anleitung – z. B. „so machst du ein Code-Review“. Jede KI kann ihn nutzen:</p>
+    <ul>
+      <li><b>Agenten</b> haben feste Skills.</li>
+      <li>Die <b>Chef-KI</b> wählt passende Skills selbst aus und gibt sie dem ausführenden Modell mit.</li>
+      <li>Im <b>KI-Chat</b> und <b>KI-Team</b> kannst du Skills direkt dazunehmen.</li>
+      <li>Format wie bei Claude Code: <code>SKILL.md</code> mit <code>name</code> und <code>description</code> – liegt in <code>data/skills/</code>.</li>
+    </ul>
+    <p class="muted">Tipp: Die <b>Beschreibung</b> ist wichtig – danach entscheidet die Chef-KI, wann ein Skill passt.</p></div>`;
+}
+
+async function load() {
+  [skills, agents] = await Promise.all([zentrale.skills.list(), zentrale.agents.list()]);
+  renderList();
+}
+function renderList() {
+  const q = $('#q').value.toLowerCase();
+  $('#list').innerHTML = skills.filter(s => (s.name + s.description).toLowerCase().includes(q)).map(s => `
+    <div class="it ${s.id === (cur && cur.id) ? 'active' : ''}" data-id="${esc(s.id)}"><b>✧ ${esc(s.name)}</b>${s.builtin ? ' <span class="badge">Vorlage</span>' : ''}<small>${esc(s.description)}</small></div>`).join('') || '<div class="empty">Keine Skills.</div>';
+}
+
+function edit(s) {
+  cur = s; renderList();
+  const usedBy = s.id ? agents.filter(a => a.skills.includes(s.id)) : [];
+  $('#edit').innerHTML = `<div class="page">
+    <label class="field"><span>Name</span><input class="input" id="name" value="${esc(s.name)}"></label>
+    <label class="field"><span>Beschreibung – wann soll eine KI diesen Skill nutzen?</span><input class="input" id="desc" value="${esc(s.description)}" placeholder="z. B. Prüft Code auf Sicherheitslücken. Nutzen bei Login, Passwörtern …"></label>
+    <label class="field"><span>Anleitung (Markdown)</span><textarea class="input" id="body">${esc(s.body || '')}</textarea></label>
+    ${usedBy.length ? `<div class="field"><span class="muted small">Genutzt von Agenten</span><div class="used">${usedBy.map(a => `<span class="badge accent">${esc(a.icon)} ${esc(a.name)}</span>`).join('')}</div></div>` : ''}
+    ${s.builtin ? '<p class="muted small">Mitgelieferte Vorlage – beim Speichern entsteht deine eigene Kopie.</p>' : ''}
+    <div class="row">
+      ${s.id && !s.builtin ? '<button class="btn danger" id="del">Löschen</button>' : ''}
+      <span class="grow"></span>
+      <select class="input" id="tryProv" title="Mit diesem Modell testen">${providers.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
+      <button class="btn" id="try">▶ Testen</button>
+      <button class="btn primary" id="save">Speichern</button>
+    </div>
+    <div id="out" class="card md" style="margin-top:14px;display:none"></div>
+  </div>`;
+  $('#save').onclick = async () => {
+    try {
+      const saved = await zentrale.skills.save({ id: s.id, name: $('#name').value, description: $('#desc').value, body: $('#body').value });
+      zentrale.notify(`Skill „${saved.name}“ gespeichert`, 'ok');
+      await load(); edit(saved);
+    } catch (e) { zentrale.notify(e.message, 'err'); }
+  };
+  if ($('#del')) $('#del').onclick = async () => { if (!confirm('Skill löschen?')) return; await zentrale.skills.remove(s.id); cur = null; await load(); intro(); };
+  $('#try').onclick = async () => {
+    const task = prompt('Testaufgabe für diesen Skill:', 'Wende den Skill auf ein kurzes Beispiel an.');
+    if (!task) return;
+    if (!s.id) return zentrale.notify('Erst speichern, dann testen.', 'warn');
+    $('#out').style.display = ''; $('#out').textContent = '…';
+    try {
+      const r = await zentrale.ki.ask({ provider: $('#tryProv').value, skills: [s.id], prompt: task, onChunk: (_, all) => { $('#out').innerHTML = renderMarkdown(all); } });
+      if (!r.text) $('#out').textContent = r.error || 'Keine Antwort';
+    } catch (e) { $('#out').textContent = e.message; }
+  };
+}
+
+$('#list').onclick = (e) => { const it = e.target.closest('[data-id]'); if (it) edit(skills.find(s => s.id === it.dataset.id)); };
+$('#q').oninput = renderList;
+$('#add').onclick = () => edit({ name: 'Neuer Skill', description: '', body: '1. …\n2. …' });
+zentrale.ki.status().then(st => { providers = st.filter(p => p.installed); });
+load().then(intro);
+</script>
+</body></html>

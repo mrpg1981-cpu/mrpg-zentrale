@@ -76,7 +76,7 @@ const other=()=>act===P.local?P.remote:P.local;
 
 async function load(p,path,keep){
   if(p.side==='remote'&&!connected){p.files=[];draw(p);return}
-  try{const {files}=await api('/api/list',{side:p.side,path});
+  try{const {files}=await api('api/list',{side:p.side,path});
     files.sort((a,b)=>(b.dir-a.dir)||a.name.localeCompare(b.name));
     const prev=p.path;p.path=path;p.files=[{name:'..',dir:true,up:true},...files.filter(f=>f.name!=='.'&&f.name!=='..')];p.marked.clear();
     if(!keep){const back=prev&&prev.startsWith(path)?prev.slice(path.length).replace(/^[\\/]/,'').split(/[\\/]/)[0]:null;const i=p.files.findIndex(f=>f.name===back);p.cur=i>0?i:0}
@@ -108,23 +108,23 @@ async function copy(){
   const dir=src.side==='local'?'up':'down';
   if(!await ask(dir==='up'?'Hochladen':'Herunterladen',`${names.length} Element(e) nach ${dst.path} ${dir==='up'?'hochladen':'herunterladen'}?`))return;
   log((dir==='up'?'⬆ ':'⬇ ')+names.join(', ')+' …');
-  try{await api('/api/copy',{dir,src:src.path,dst:dst.path,names});log('✔ Fertig');await load(dst,dst.path,1);src.marked.clear();draw(src)}catch(e){log(e.message,1)}
+  try{await api('api/copy',{dir,src:src.path,dst:dst.path,names});log('✔ Fertig');await load(dst,dst.path,1);src.marked.clear();draw(src)}catch(e){log(e.message,1)}
 }
 async function rename(){const n=selected(act)[0];if(!n)return;const v=await ask('Umbenennen',n,n);if(!v||v===n)return;
-  try{await api('/api/rename',{side:act.side,from:act.join(n),to:act.join(v)});log(n+' → '+v);load(act,act.path,1)}catch(e){log(e.message,1)}}
+  try{await api('api/rename',{side:act.side,from:act.join(n),to:act.join(v)});log(n+' → '+v);load(act,act.path,1)}catch(e){log(e.message,1)}}
 async function mkdir(){const v=await ask('Neuer Ordner','in '+act.path,'');if(!v)return;
-  try{await api('/api/mkdir',{side:act.side,path:act.join(v)});log('Ordner '+v+' angelegt');load(act,act.path,1)}catch(e){log(e.message,1)}}
+  try{await api('api/mkdir',{side:act.side,path:act.join(v)});log('Ordner '+v+' angelegt');load(act,act.path,1)}catch(e){log(e.message,1)}}
 async function del(){const names=selected(act);if(!names.length)return;if(!await ask('Löschen',`${names.length} Element(e) wirklich löschen?\n${names.join(', ')}`))return;
-  try{for(const n of names)await api('/api/delete',{side:act.side,path:act.join(n)});log('🗑 '+names.join(', '));load(act,act.path,1)}catch(e){log(e.message,1)}}
+  try{for(const n of names)await api('api/delete',{side:act.side,path:act.join(n)});log('🗑 '+names.join(', '));load(act,act.path,1)}catch(e){log(e.message,1)}}
 
 async function connect(){
   const c={proto:$('proto').value,host:$('host').value.trim(),port:$('port').value.trim(),user:$('user').value.trim(),pass:$('pass').value};
   if(!c.host)return log('Server fehlt',1);
   try{localStorage.setItem(LS,JSON.stringify({...c,pass:undefined}))}catch{}
   log('Verbinde mit '+c.proto+'://'+c.host+' …');
-  try{const {home}=await api('/api/connect',c);connected=true;setConn(c.user+'@'+c.host);log('✔ Verbunden');await load(P.remote,home);setActive(P.remote)}
+  try{const {home}=await api('api/connect',c);connected=true;setConn(c.user+'@'+c.host);log('✔ Verbunden');await load(P.remote,home);setActive(P.remote)}
   catch(e){log('Verbindung fehlgeschlagen: '+e.message,1)}}
-async function disconnect(){await api('/api/disconnect',{}).catch(()=>{});connected=false;setConn();P.remote.files=[];draw(P.remote);log('Getrennt')}
+async function disconnect(){await api('api/disconnect',{}).catch(()=>{});connected=false;setConn();P.remote.files=[];draw(P.remote);log('Getrennt')}
 function setConn(info){$('conn').textContent=info?'● '+info:'● offline';$('conn').classList.toggle('on',!!info)}
 
 const keys={F1:()=>log('Pfeile/Pos1/Ende/BildAuf/Ab bewegen · Enter öffnen · Backspace hoch · Einfg/Leertaste markieren · Strg+A alle · F5 Kopieren · F6 Umbenennen · F7 Ordner · F8/Entf Löschen · F10 Trennen'),
@@ -155,7 +155,7 @@ $('proto').onchange=()=>$('port').placeholder=$('proto').value==='sftp'?'22':'21
 
 (async()=>{try{const s=JSON.parse(localStorage.getItem(LS)||'{}');for(const k of ['proto','host','port','user'])if(s[k])$(k).value=s[k]}catch{}
   $('proto').onchange();
-  const st=await api('/api/status');if(st.connected){connected=true;setConn(st.info)}
+  const st=await api('api/status');if(st.connected){connected=true;setConn(st.info)}
   let lp=st.localHome;try{lp=localStorage.getItem(LS+'-lp')||lp}catch{}
   await load(P.local,lp);if(connected)await load(P.remote,st.home);setActive(P.local)})().catch(e=>log('Backend nicht erreichbar – läuft "npm start"? '+e.message,1));
 })();

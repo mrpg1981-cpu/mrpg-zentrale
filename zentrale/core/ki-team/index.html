@@ -52,9 +52,12 @@
 const $ = (s) => document.querySelector(s);
 const { esc, ago } = zentrale.util;
 const COLORS = { claude: '#d97757', codex: '#10a37f', gemini: '#4c8df6', ollama: '#b9bec7', tests: '#f5d76e' };
-let recipes = {}, providers = [], projects = [], runs = [], current = null, unfollow = null, form = null;
+let recipes = {}, providers = [], projects = [], runs = [], current = null, unfollow = null, form = null, agents = [], skills = [];
 const ready = () => providers.filter(p => p.installed && p.loggedIn !== false).map(p => p.id);
-const avatar = (p) => `<span class="avatar" style="background:${COLORS[p] || '#888'}" title="${esc(p)}">${esc((p || '?')[0].toUpperCase())}</span>`;
+const avatar = (p) => {
+  if (String(p).startsWith('agent:')) { const a = agents.find(x => 'agent:' + x.id === p); return `<span class="avatar" style="background:var(--panel);color:var(--text)" title="${esc(a ? a.name : p)}">${esc(a ? a.icon : '◆')}</span>`; }
+  return `<span class="avatar" style="background:${COLORS[p] || '#888'}" title="${esc(p)}">${esc((p || '?')[0].toUpperCase())}</span>`;
+};
 const badge = (s) => `<span class="badge ${s === 'fertig' ? 'ok' : s === 'läuft' ? 'warn' : s === 'fehler' || s === 'abgebrochen' ? 'err' : ''}">${esc(s)}</span>`;
 
 // ---------- Liste ----------
@@ -99,7 +102,9 @@ function showForm(preset) {
   current = null; loadRuns();
   form = preset || form || defaultsFor('chef');
   const R = recipes[form.recipe];
-  const provOpts = (sel) => providers.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''} ${p.installed ? '' : 'disabled'}>${esc(p.name)}${p.installed ? (p.loggedIn === false ? ' (nicht angemeldet)' : '') : ' (fehlt)'}</option>`).join('');
+  const provOpts = (sel, noAgents) => `<optgroup label="Modelle">` + providers.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''} ${p.installed ? '' : 'disabled'}>${esc(p.name)}${p.installed ? (p.loggedIn === false ? ' (nicht angemeldet)' : '') : ' (fehlt)'}</option>`).join('') + '</optgroup>' +
+    (agents.length && !noAgents ? `<optgroup label="Agenten">` + agents.map(a => `<option value="agent:${esc(a.id)}" ${'agent:' + a.id === sel ? 'selected' : ''}>${esc(a.icon)} ${esc(a.name)}</option>`).join('') + '</optgroup>' : '');
+  form.skills = form.skills || [];
   $('#main').innerHTML = `<div class="page">
     <div class="row"><button class="btn sm" id="listBtn" title="Läufe">☰</button><h2 style="margin:0">⚭ Neues KI-Team</h2></div>
     <p class="muted">Wähle, wie die KIs zusammenarbeiten sollen. Jede KI sieht, was die anderen vor ihr geliefert haben.</p>
@@ -122,7 +127,7 @@ function showForm(preset) {
 
     ${R.roles.length ? `<h2>Rollen</h2><div class="roles">${R.roles.map(role => role.multi
       ? `<div class="card" style="grid-column:1/-1"><div class="small muted" style="margin-bottom:8px">${esc(role.label)}</div>${providers.map(p => `<label class="chk"><input type="checkbox" data-multi="${role.key}" value="${p.id}" ${form.roles[role.key].includes(p.id) ? 'checked' : ''} ${p.installed ? '' : 'disabled'}>${esc(p.name)}</label>`).join('')}</div>`
-      : `<label class="field card" style="margin:0"><span>${esc(role.label)}</span><select class="input" data-role="${role.key}">${provOpts(form.roles[role.key])}</select></label>`).join('')}</div>` : ''}
+      : `<label class="field card" style="margin:0"><span>${esc(role.label)}</span><select class="input" data-role="${role.key}">${provOpts(form.roles[role.key], role.key === 'chef')}</select></label>`).join('')}</div>` : ''}
 
     ${form.recipe === 'kette' ? `<h2>Schritte</h2><div class="chain" id="chain">${form.options.steps.map((s, i) => `
       <div class="st" data-i="${i}"><b class="mono" style="padding-top:8px">${i + 1}.</b>
@@ -133,6 +138,9 @@ function showForm(preset) {
       <button class="btn sm" id="addStep">＋ Schritt</button>
       <div class="muted small" style="margin-top:6px">Platzhalter: <code>{{aufgabe}}</code> · <code>{{vorher}}</code> · <code>{{schritt:1}}</code></div></div>` : ''}
 
+    ${skills.length ? `<h2>Skills für alle Schritte <span class="muted small" style="font-weight:normal">(optional${form.recipe === 'chef' ? ' – die Chef-KI wählt sonst selbst' : ''})</span></h2>
+      <div>${skills.map(x => `<label class="chk" title="${esc(x.description)}"><input type="checkbox" data-skill value="${esc(x.id)}" ${form.skills.includes(x.id) ? 'checked' : ''}>✧ ${esc(x.name)}</label>`).join('')}</div>` : ''}
+
     <div class="row" style="margin-top:20px"><span class="badge" id="est"></span><span class="grow"></span><button class="btn primary" id="startBtn">${form.recipe === 'chef' ? '🧭 An die Chef-KI geben' : '⚭ Team starten'}</button></div>
   </div>`;
 
@@ -141,6 +149,7 @@ function showForm(preset) {
     if ($('#mode')) form.mode = $('#mode').value;
     if ($('#rounds')) form.options.rounds = +$('#rounds').value;
     if ($('#tests')) form.options.tests = $('#tests').checked;
+    form.skills = [...document.querySelectorAll('[data-skill]:checked')].map(c => c.value);
     const est = estimate(form);
     if ($('#est')) { $('#est').textContent = '≈ ' + est.text; $('#est').className = 'badge ' + (est.level >= 3 ? 'warn' : est.level === 1 ? 'ok' : 'accent'); }
     document.querySelectorAll('[data-role]').forEach(s => form.roles[s.dataset.role] = s.value);
@@ -157,7 +166,7 @@ function showForm(preset) {
   $('#startBtn').onclick = async () => {
     sync();
     try {
-      const r = await zentrale.team.start({ recipe: form.recipe, task: form.task, project: form.project, mode: form.mode, roles: form.roles, options: form.options });
+      const r = await zentrale.team.start({ recipe: form.recipe, task: form.task, project: form.project, mode: form.mode, roles: form.roles, options: form.options, skills: form.skills });
       form.task = '';
       showRun(r.id);
     } catch (e) { zentrale.notify(e.message, 'err'); }
@@ -168,16 +177,18 @@ function showForm(preset) {
 const DEC = { selbst: 'erledigt es selbst', weiterleiten: 'leitet weiter', team: 'setzt ein Team ein' };
 function decisionHtml(d) {
   if (!d) return '';
-  const target = d.entscheidung === 'weiterleiten' ? ` an ${avatar(d.modell)} <b>${esc(d.modell)}</b>` : d.entscheidung === 'team' ? `: <b>${esc((recipes[d.rezept] || {}).name || d.rezept)}</b>` : '';
+  const ag = d.agent ? agents.find(a => a.id === d.agent) : null;
+  const target = d.entscheidung === 'weiterleiten' ? ` an ${ag ? `${esc(ag.icon)} <b>${esc(ag.name)}</b> mit ` : ''}${avatar(d.modell)} <b>${esc(d.modell || '')}</b>` : d.entscheidung === 'team' ? `: <b>${esc((recipes[d.rezept] || {}).name || d.rezept)}</b>` : '';
   const roles = d.rollen ? ' ' + Object.entries(d.rollen).map(([k, v]) => `<span class="small muted">${esc(k)}</span> ${(Array.isArray(v) ? v : [v]).map(avatar).join('')}`).join(' ') : '';
-  return `<div class="row">🧭 <b>Chef ${DEC[d.entscheidung] || esc(d.entscheidung)}</b>${target}${roles}</div>${d.begruendung ? `<div class="muted small" style="margin-top:6px">${esc(d.begruendung)}</div>` : ''}`;
+  const sk = d.skills && d.skills.length ? ` <span class="small muted">· Skills:</span> ${d.skills.map(x => `<span class="badge accent">✧ ${esc(x)}</span>`).join(' ')}` : '';
+  return `<div class="row">🧭 <b>Chef ${DEC[d.entscheidung] || esc(d.entscheidung)}</b>${target}${roles}${sk}</div>${d.begruendung ? `<div class="muted small" style="margin-top:6px">${esc(d.begruendung)}</div>` : ''}`;
 }
 function parseDec(t) { const m = String(t || '').match(/\{[\s\S]*\}/g) || []; for (const b of m.reverse()) { try { const d = JSON.parse(b); if (d.entscheidung) return d; } catch {} } return null; }
 
 function stepCard(s) {
   const dec = s.title === 'Chef-Entscheidung' && s.status === 'fertig' ? parseDec(s.output) : null;
   return `<div class="card step ${s.status}" id="step-${s.id}">
-    <div class="head">${avatar(s.provider)}<b>${esc(s.title)}</b><span class="muted small">${esc(s.provider)}${s.mode && s.mode !== 'chat' ? ' · ' + (s.mode === 'full' ? '⚠ alles' : '✎ ändert Dateien') : ''}</span>
+    <div class="head">${s.agent ? avatar('agent:' + s.agent) : ''}${avatar(s.provider)}<b>${esc(s.title)}</b><span class="muted small">${esc(s.provider)}${s.agent ? ' als ' + esc((agents.find(a => a.id === s.agent) || {}).name || s.agent) : ''}${s.skills && s.skills.length ? ' · ✧ ' + s.skills.map(esc).join(', ') : ''}${s.mode && s.mode !== 'chat' ? ' · ' + (s.mode === 'full' ? '⚠ alles' : '✎ ändert Dateien') : ''}</span>
       <span class="grow"></span>${badge(s.status)}<span class="muted small">${s.ended ? ((s.ended - s.started) / 1000).toFixed(0) + ' s' : ''}</span></div>
     <div class="tools">${(s.tools || []).map(t => `<div>${esc(t.name)} ${esc(t.target)}</div>`).join('')}</div>
     <div class="out md">${dec ? decisionHtml(dec) : s.output ? renderMarkdown(s.output) : s.status === 'läuft' ? '<span class="muted pulse">denkt nach …</span>' : s.error ? `<span style="color:var(--red)">${esc(s.error)}</span>` : ''}</div>
@@ -254,8 +265,8 @@ zentrale.events.on('team.start', loadRuns);
 zentrale.events.on('team.end', loadRuns);
 
 (async () => {
-  const [r, st, pr] = await Promise.all([zentrale.team.recipes(), zentrale.ki.status(), zentrale.projects.list().catch(() => ({ items: [] }))]);
-  recipes = r; providers = st; projects = pr.items.map(p => p.name);
+  const [r, st, pr, ag, sk] = await Promise.all([zentrale.team.recipes(), zentrale.ki.status(), zentrale.projects.list().catch(() => ({ items: [] })), zentrale.agents.list().catch(() => []), zentrale.skills.list().catch(() => [])]);
+  recipes = r; providers = st; projects = pr.items.map(p => p.name); agents = ag; skills = sk;
   await loadRuns();
   const live = runs.find(x => x.status === 'läuft');
   live ? showRun(live.id) : showForm();

@@ -56,7 +56,9 @@ function emit(type, payload, from = 'zentrale') {
 }
 const procs = require('./lib/procs')({ runEnv, emit });
 const terminals = require('./lib/terminal')({ settings, runEnv });
-const team = require('./lib/team')({ dataDir: DIRS.data, ki, emit, runEnv, resolveProject: (rel) => files.resolve(rel) });
+const library = require('./lib/library')({ root: ROOT, dataDir: DIRS.data });
+const team = require('./lib/team')({ dataDir: DIRS.data, ki, emit, runEnv, library, resolveProject: (rel) => files.resolve(rel) });
+const backends = require('./lib/backends')({ modulesDir: DIRS.modules, procs, runEnv });
 
 // ---------- Module: core/ (eingebaut) und modules/ (deine Apps) ----------
 function scan(dir, core) {
@@ -67,7 +69,9 @@ function scan(dir, core) {
       const m = readJSON(path.join(dir, d.name, 'module.json'), null);
       if (!m) return null;
       const base = core ? 'core' : 'modules';
-      return { id: d.name, icon: '◇', order: 100, ui: 'index.html', group: core ? 'Zentrale' : 'Module', ...m, core, url: `/${base}/${d.name}/${m.ui || 'index.html'}` };
+      // Module mit eigenem Server laufen über den Proxy /m/<id>/
+      const url = m.backend && m.backend.cmd ? `/m/${d.name}/` : `/${base}/${d.name}/${m.ui || 'index.html'}`;
+      return { id: d.name, icon: '◇', order: 100, ui: 'index.html', group: core ? 'Zentrale' : 'Module', ...m, core, url };
     })
     .filter(Boolean);
 }
@@ -105,7 +109,11 @@ route('POST', '/api/ki/ask', async (req, res) => {
   const cwd = b.project != null ? await projectCwd(b.project) : undefined;
   const send = sse(res);
   let child;
-  try { child = ki.ask({ ...b, cwd }, send); } catch (e) { send('error', e.message); return res.end(); }
+  try {
+    // Agent und Skills in den Prompt einbauen – funktioniert mit jeder KI
+    const c = library.compose({ prompt: b.prompt, skills: b.skills, agent: b.agent, provider: b.provider, model: b.model, mode: b.mode });
+    child = ki.ask({ ...b, prompt: c.prompt, provider: c.provider || 'claude', model: c.model, mode: c.mode || 'chat', cwd }, send);
+  } catch (e) { send('error', e.message); return res.end(); }
   child.on('close', () => res.end());
   child.on('error', () => res.end());
   res.on('close', () => { if (child.exitCode === null) child.kill(); });
@@ -125,6 +133,21 @@ route('POST', '/api/ki/install', async (req) => {
   return procs.start({ name: `${provider} installieren`, cmd, cwd: DIRS.data });
 });
 route('POST', '/api/ki/logout', async (req) => { ki.logout((await readBody(req)).provider); return { ok: true }; });
+
+// Skills & Agenten
+route('GET', '/api/skills', () => library.listSkills());
+route('PUT', '/api/skills', async (req) => library.saveSkill(await readBody(req)));
+route('DELETE', /^\/api\/skills\/([\w-]+)$/, (req, res, url, m) => { library.deleteSkill(m[1]); return { ok: true }; });
+route('GET', '/api/agents', () => library.listAgents());
+route('PUT', '/api/agents', async (req) => library.saveAgent(await readBody(req)));
+route('DELETE', /^\/api\/agents\/([\w-]+)$/, (req, res, url, m) => { library.deleteAgent(m[1]); return { ok: true }; });
+route('POST', /^\/api\/modules\/([\w-]+)\/restart$/, async (req, res, url, m) => {
+  const mod = loadModules().find((x) => x.id === m[1] && x.backend);
+  if (!mod) throw httpError(404, 'Modul ohne eigenen Server');
+  backends.stop(mod.id);
+  await backends.ensure(mod);
+  return { ok: true };
+});
 
 // KI-Team
 route('GET', '/api/team/recipes', () => team.RECIPES);
@@ -219,6 +242,13 @@ const server = http.createServer(async (req, res) => {
     if (!auth.isAuthed(req)) {
       res.writeHead(302, { Location: '/login.html' });
       return res.end();
+    }
+    if (p.startsWith('/m/')) {
+      const [, id] = p.match(/^\/m\/([\w-]+)/) || [];
+      const mod = id && loadModules().find((x) => x.id === id && x.backend);
+      if (!mod) return sendJSON(res, 404, { error: 'Modul nicht gefunden' });
+      if (p === `/m/${id}`) { res.writeHead(301, { Location: `/m/${id}/` }); return res.end(); }
+      return await backends.proxy(mod, req, res, req.url.slice(`/m/${id}`.length));
     }
     if (p.startsWith('/core/')) return serveStatic(res, DIRS.core, p.slice(6));
     if (p.startsWith('/modules/')) return serveStatic(res, DIRS.modules, p.slice(9));

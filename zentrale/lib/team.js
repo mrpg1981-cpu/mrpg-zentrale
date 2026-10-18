@@ -60,7 +60,7 @@ const RECIPES = {
   },
 };
 
-module.exports = function createTeam({ dataDir, ki, emit, resolveProject, runEnv }) {
+module.exports = function createTeam({ dataDir, ki, emit, resolveProject, runEnv, library }) {
   const dir = path.join(dataDir, 'team');
   fs.mkdirSync(dir, { recursive: true });
   const runs = new Map();       // id -> run (nur im Speicher: aktive + zuletzt geladene)
@@ -87,9 +87,21 @@ module.exports = function createTeam({ dataDir, ki, emit, resolveProject, runEnv
   }
 
   // Einen Schritt mit einer KI ausführen; Antwort live an Zuschauer streamen
-  function runStep(run, { role, provider, mode = 'chat', prompt, title }) {
+  function runStep(run, { role, provider, mode = 'chat', prompt, title, agent = null }) {
     if (run.cancel) return Promise.reject(new Error('abgebrochen'));
-    const step = { id: run.steps.length + 1, role, title: title || role, provider, mode, prompt, output: '', tools: [], status: 'läuft', started: Date.now() };
+    // "agent:<id>" als Modell = diesen Agenten ausführen (mit seinen Anweisungen und Skills)
+    let extraSkills = [];
+    if (typeof provider === 'string' && provider.startsWith('agent:')) {
+      agent = provider.slice(6);
+      const a = library.getAgent(agent);
+      provider = a && run.available.includes(a.provider) ? a.provider : (run.available.find((p) => p !== 'ollama') || run.available[0] || 'claude');
+    }
+    if (run.skills && run.skills.length) extraSkills = run.skills;
+    if (agent || extraSkills.length) {
+      try { prompt = library.compose({ prompt, agent, skills: extraSkills }).prompt; }
+      catch (e) { return Promise.reject(e); }
+    }
+    const step = { id: run.steps.length + 1, role, title: title || role, provider, agent, skills: extraSkills, mode, prompt, output: '', tools: [], status: 'läuft', started: Date.now() };
     run.steps.push(step);
     stepUpdate(run, step);
 
@@ -193,6 +205,7 @@ module.exports = function createTeam({ dataDir, ki, emit, resolveProject, runEnv
       const chef = run.roles.chef;
       const avail = run.available.filter((p) => p !== chef);
       const canEdit = !!run.cwd && run.mode !== 'chat';
+      const cat = library.catalog();
       const raw = await runStep(run, {
         role: 'chef', provider: chef, title: 'Chef-Entscheidung', mode: 'chat',
         prompt: `Du bist die CHEF-KI der MRPG Zentrale und leitest ein Team aus KI-Modellen. Entscheide, wie die Aufgabe am besten UND am sparsamsten erledigt wird.\n` +
@@ -205,18 +218,23 @@ module.exports = function createTeam({ dataDir, ki, emit, resolveProject, runEnv
           (canEdit ? `- "team" mit rezept "bauen": Planen → Umsetzen → Tests → Prüfen. Nur für größere oder riskante Änderungen über mehrere Dateien. (3–5 Anfragen)\n` : '') +
           `- "team" mit rezept "zweitmeinung": Antwort + Kritik + Überarbeitung. Für wichtige Entscheidungen, Sicherheit, Architektur. (3 Anfragen)\n` +
           `- "team" mit rezept "diskussion": Mehrere Modelle antworten, ein Moderator entscheidet. Nur selten, bei wirklich strittigen Fragen. (Teilnehmer + 1 Anfragen)\n\n` +
+          (cat.agents.length ? `AGENTEN (feste Rollen, jede KI kann sie ausführen – beim Weiterleiten mit "agent" angeben):\n${cat.agents.map((a) => `- ${a.id}: ${a.name} – ${a.description}`).join('\n')}\n\n` : '') +
+          (cat.skills.length ? `SKILLS (Anleitungen, die du dem ausführenden Modell mitgeben kannst – nur wirklich passende, sie kosten Platz):\n${cat.skills.map((x) => `- ${x.id}: ${x.description}`).join('\n')}\n\n` : '') +
           `PROJEKT: ${run.project || 'keins'} · DATEIEN ÄNDERN ERLAUBT: ${canEdit ? 'ja' : 'nein'}\n\n` +
           `AUFGABE:\n${run.task}\n\n` +
           `Antworte NUR mit einem JSON-Objekt, ohne weiteren Text:\n` +
-          `{"entscheidung": "selbst" | "weiterleiten" | "team", "modell": "<bei weiterleiten>", "rezept": "<bei team>", ` +
+          `{"entscheidung": "selbst" | "weiterleiten" | "team", "modell": "<bei weiterleiten>", "agent": "<optional: Agent-ID>", "skills": ["<optional: Skill-IDs>"], "rezept": "<bei team>", ` +
           `"rollen": {<optional, z. B. "planer":"claude","umsetzer":"codex","pruefer":"gemini" oder "autor"/"kritiker" oder "teilnehmer":[…],"moderator">}, ` +
-          `"aendert_dateien": true|false, "begruendung": "<ein Satz>", "antwort": "<NUR bei selbst ohne Dateiänderung: deine vollständige Antwort in Markdown>"}`,
+          `"aendert_dateien": true|false, "begruendung": "<ein Satz>", "antwort": "<NUR bei selbst ohne Dateiänderung und ohne Skills/Agent: deine vollständige Antwort in Markdown>"}`,
       });
 
       const d = parseDecision(raw) || { entscheidung: 'selbst', antwort: raw, begruendung: 'Keine strukturierte Entscheidung – Antwort direkt übernommen.' };
       const valid = (p) => run.available.includes(p);
       const pick = (want, prefer) => (valid(want) ? want : prefer.find(valid) || chef);
-      run.decision = { entscheidung: d.entscheidung, modell: d.modell, rezept: d.rezept, begruendung: d.begruendung || '' };
+      const agentOk = d.agent && cat.agents.some((a) => a.id === d.agent) ? d.agent : null;
+      const skillIds = (Array.isArray(d.skills) ? d.skills : []).filter((id) => cat.skills.some((x) => x.id === id)).slice(0, 4);
+      run.decision = { entscheidung: d.entscheidung, modell: d.modell, agent: agentOk, skills: skillIds, rezept: d.rezept, begruendung: d.begruendung || '' };
+      if (skillIds.length) run.skills = [...new Set([...(run.skills || []), ...skillIds])];
       save(run);
       publish(run, 'run', summary(run));
 
@@ -240,10 +258,14 @@ module.exports = function createTeam({ dataDir, ki, emit, resolveProject, runEnv
       }
 
       const mode = canEdit && d.aendert_dateien ? run.mode : 'chat';
-      if (d.entscheidung === 'weiterleiten' && valid(d.modell) && d.modell !== chef) {
-        run.decision.modell = d.modell;
+      if (d.entscheidung === 'weiterleiten' && (agentOk || (valid(d.modell) && d.modell !== chef))) {
+        const a = agentOk ? library.getAgent(agentOk) : null;
+        // Agent mit eigenem Modell -> das nehmen; sonst das vom Chef gewählte Modell
+        const target = a && valid(a.provider) ? a.provider : valid(d.modell) ? d.modell : chef;
+        run.decision.modell = target;
         run.result = await runStep(run, {
-          role: 'beauftragt', provider: d.modell, title: `Weitergeleitet an ${d.modell}`, mode,
+          role: 'beauftragt', provider: target, title: a ? `${a.icon} ${a.name} (${target})` : `Weitergeleitet an ${target}`, mode: a && a.mode === 'chat' ? 'chat' : mode,
+          agent: a ? a.id : null, // Rolle + Skills des Agenten; compose() entfernt doppelte Skills
           prompt: `Die Chef-KI (${chef}) hat dir diese Aufgabe zugeteilt${d.begruendung ? ` – Begründung: ${d.begruendung}` : ''}.\n` +
             (mode !== 'chat' ? 'Ändere die nötigen Dateien im aktuellen Projekt direkt und fasse am Ende kurz zusammen, was du geändert hast.\n' : '') +
             `\nAUFGABE:\n${run.task}`,
@@ -252,7 +274,7 @@ module.exports = function createTeam({ dataDir, ki, emit, resolveProject, runEnv
       }
 
       // selbst erledigen
-      if (mode === 'chat' && d.antwort && String(d.antwort).trim()) { run.result = String(d.antwort); return; } // schon beantwortet – keine weitere Anfrage
+      if (mode === 'chat' && !skillIds.length && !agentOk && d.antwort && String(d.antwort).trim()) { run.result = String(d.antwort); return; } // schon beantwortet – keine weitere Anfrage
       run.result = await runStep(run, {
         role: 'chef', provider: chef, title: 'Chef erledigt es selbst', mode,
         prompt: (mode !== 'chat' ? 'Erledige die Aufgabe direkt im aktuellen Projekt (Dateien ändern) und fasse am Ende kurz zusammen, was du geändert hast.\n\n' : '') + run.task,
@@ -362,22 +384,23 @@ module.exports = function createTeam({ dataDir, ki, emit, resolveProject, runEnv
   };
 
   // ---------- Öffentliche Funktionen ----------
-  async function start({ recipe, task, roles = {}, project, mode = 'edit', options = {}, title }) {
+  async function start({ recipe, task, roles = {}, project, mode = 'edit', options = {}, title, skills = [] }) {
     const R = RECIPES[recipe];
     if (!R) throw Object.assign(new Error('Unbekanntes Rezept'), { status: 400 });
     if (!task || !task.trim()) throw Object.assign(new Error('Aufgabe fehlt'), { status: 400 });
     if (R.needsProject && !project) throw Object.assign(new Error('Für dieses Rezept ein Projekt wählen'), { status: 400 });
     if (!['chat', 'edit', 'full'].includes(mode)) mode = 'edit';
     const known = Object.keys(ki.PROVIDERS);
-    const valid = (p) => (Array.isArray(p) ? p.every((x) => known.includes(x)) : known.includes(p));
+    const one = (x) => known.includes(x) || (typeof x === 'string' && x.startsWith('agent:') && !!library.getAgent(x.slice(6)));
+    const valid = (p) => (Array.isArray(p) ? p.length > 0 && p.every(one) : one(p));
     for (const r of R.roles) if (!valid(roles[r.key])) throw Object.assign(new Error(`Rolle „${r.label}“: Modell wählen`), { status: 400 });
-    if (recipe === 'kette') for (const s of options.steps || []) if (!known.includes(s.provider)) throw Object.assign(new Error('Jeder Schritt braucht ein Modell'), { status: 400 });
+    if (recipe === 'kette') for (const s of options.steps || []) if (!one(s.provider)) throw Object.assign(new Error('Jeder Schritt braucht ein Modell'), { status: 400 });
 
     const available = ki.status().filter((p) => p.installed && p.loggedIn !== false).map((p) => p.id);
     if (recipe === 'chef' && !available.includes(roles.chef)) throw Object.assign(new Error('Die Chef-KI ist nicht angemeldet/installiert'), { status: 400 });
     const run = {
       id: Date.now().toString(36) + crypto.randomBytes(2).toString('hex'),
-      available, decision: null,
+      available, decision: null, skills: (Array.isArray(skills) ? skills : []).filter((id) => library.getSkill(id)),
       title: title || task.trim().split('\n')[0].slice(0, 70),
       recipe, task, roles, project: project || '', mode, options,
       cwd: project ? await resolveProject(project) : undefined,

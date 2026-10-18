@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agenten</title><link rel="stylesheet" href="/theme.css">
+<style>
+  body { height: 100vh; display: grid; grid-template-columns: minmax(240px, 320px) 1fr; }
+  .side { border-right: 1px solid var(--line); background: var(--bg-deep); display: flex; flex-direction: column; min-height: 0; }
+  #list { flex: 1; overflow: auto; padding: 6px; }
+  .it { padding: 8px 10px; border-radius: var(--radius); cursor: pointer; display: flex; gap: 10px; }
+  .it:hover, .it.active { background: var(--cyan-soft); }
+  .it.active b { color: var(--cyan); }
+  .it .ic { font-size: 20px; width: 26px; text-align: center; }
+  .it small { display: block; color: var(--muted); margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .main { overflow: auto; }
+  #instr { min-height: 140px; width: 100%; resize: vertical; }
+  .chk { display: inline-flex; gap: 5px; align-items: center; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; margin: 0 6px 6px 0; font-size: 13px; }
+  .chk:has(input:checked) { border-color: var(--cyan); color: var(--cyan); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  #task { width: 100%; min-height: 70px; resize: vertical; }
+  .tools { font: 11.5px var(--mono); color: var(--muted); margin-bottom: 6px; }
+  .tools div::before { content: '⚙ '; color: var(--yellow); }
+  @media (max-width: 760px) { body { grid-template-columns: 1fr; grid-template-rows: 35% 65%; } .two { grid-template-columns: 1fr; } }
+</style></head>
+<body>
+<div class="side">
+  <div class="toolbar"><input class="input grow" id="q" placeholder="Agenten suchen …"><button class="btn primary" id="add" title="Neuer Agent">＋</button></div>
+  <div id="list"></div>
+</div>
+<div class="main" id="main"></div>
+<script src="/zentrale-sdk.js"></script>
+<script src="/md.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc } = zentrale.util;
+let agents = [], skills = [], providers = [], projects = [], cur = null, ctrl = null;
+
+function intro() {
+  $('#main').innerHTML = `<div class="page"><h2>◆ Agenten</h2>
+    <p>Ein <b>Agent</b> ist eine feste Rolle: Anweisungen + Skills + Rechte. Er ist an kein Modell gebunden – <b>jede KI kann ihn ausführen</b>.</p>
+    <ul>
+      <li><b>KI-Chat:</b> Agent oben auswählen – das gewählte Modell arbeitet dann in dieser Rolle.</li>
+      <li><b>Chef-KI:</b> kennt alle Agenten und leitet passende Aufgaben selbst an sie weiter.</li>
+      <li><b>KI-Team:</b> jede Rolle (Planer, Umsetzer, Prüfer …) kann ein Agent sein.</li>
+      <li><b>Eigene Module:</b> <code>zentrale.agents.run('code-reviewer', { prompt })</code></li>
+    </ul></div>`;
+}
+
+async function load() {
+  [agents, skills] = await Promise.all([zentrale.agents.list(), zentrale.skills.list()]);
+  renderList();
+}
+function renderList() {
+  const q = $('#q').value.toLowerCase();
+  $('#list').innerHTML = agents.filter(a => (a.name + a.description).toLowerCase().includes(q)).map(a => `
+    <div class="it ${a.id === (cur && cur.id) ? 'active' : ''}" data-id="${esc(a.id)}"><span class="ic">${esc(a.icon)}</span><div><b>${esc(a.name)}</b>${a.builtin ? ' <span class="badge">Vorlage</span>' : ''}<small>${esc(a.description)}</small></div></div>`).join('') || '<div class="empty">Keine Agenten.</div>';
+}
+
+const provOpts = (sel, anyLabel) => `<option value="">${anyLabel}</option>` + providers.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''} ${p.installed ? '' : 'disabled'}>${esc(p.name)}</option>`).join('');
+
+function edit(a) {
+  cur = a; renderList();
+  $('#main').innerHTML = `<div class="page">
+    <div class="row"><input class="input" id="icon" value="${esc(a.icon)}" style="width:56px;text-align:center;font-size:18px"><input class="input grow" id="name" value="${esc(a.name)}" placeholder="Name"></div>
+    <label class="field" style="margin-top:12px"><span>Beschreibung – wofür ist der Agent da? (danach entscheidet die Chef-KI)</span><input class="input" id="desc" value="${esc(a.description)}"></label>
+    <div class="two">
+      <label class="field"><span>Bevorzugtes Modell</span><select class="input" id="prov">${provOpts(a.provider, 'beliebig – das gerade gewählte Modell')}</select></label>
+      <label class="field"><span>Rechte im Projekt</span><select class="input" id="mode">
+        <option value="chat" ${a.mode === 'chat' ? 'selected' : ''}>💬 nur lesen/antworten</option>
+        <option value="edit" ${a.mode === 'edit' ? 'selected' : ''}>✎ Dateien ändern</option>
+        <option value="full" ${a.mode === 'full' ? 'selected' : ''}>⚠ alles (auch Befehle)</option></select></label>
+    </div>
+    <label class="field"><span>Anweisungen – wie soll der Agent arbeiten?</span><textarea class="input" id="instr">${esc(a.instructions)}</textarea></label>
+    <div class="field"><span class="muted small">Skills</span><div>${skills.map(s => `<label class="chk" title="${esc(s.description)}"><input type="checkbox" value="${esc(s.id)}" ${a.skills.includes(s.id) ? 'checked' : ''}>✧ ${esc(s.name)}</label>`).join('') || '<span class="muted">Noch keine Skills.</span>'}</div></div>
+    ${a.builtin ? '<p class="muted small">Mitgelieferte Vorlage – beim Speichern entsteht deine eigene Kopie.</p>' : ''}
+    <div class="row">${a.id && !a.builtin ? '<button class="btn danger" id="del">Löschen</button>' : ''}<span class="grow"></span>
+      ${a.id ? '<button class="btn" id="toChat">✦ Im KI-Chat nutzen</button>' : ''}<button class="btn primary" id="save">Speichern</button></div>
+
+    ${a.id ? `<h2>▶ Agent ausführen</h2>
+    <div class="card">
+      <textarea class="input" id="task" placeholder="Aufgabe für ${esc(a.name)} …"></textarea>
+      <div class="row" style="margin-top:8px">
+        <select class="input" id="runProv" title="Welche KI führt den Agenten aus?">${provOpts(a.provider, 'Modell: wie eingestellt')}</select>
+        <select class="input" id="runProj"><option value="">— kein Projekt —</option>${projects.map(p => `<option>${esc(p)}</option>`).join('')}</select>
+        <span class="grow"></span><button class="btn primary" id="run">▶ Ausführen</button>
+      </div>
+      <div id="out" style="margin-top:12px;display:none"><div class="tools" id="tools"></div><div class="md" id="text"></div></div>
+    </div>` : ''}
+  </div>`;
+
+  const data = () => ({ id: a.id, icon: $('#icon').value, name: $('#name').value, description: $('#desc').value, provider: $('#prov').value, mode: $('#mode').value, instructions: $('#instr').value, skills: [...document.querySelectorAll('.chk input:checked')].map(c => c.value) });
+  $('#save').onclick = async () => {
+    try { const saved = await zentrale.agents.save(data()); zentrale.notify(`Agent „${saved.name}“ gespeichert`, 'ok'); await load(); edit(saved); }
+    catch (e) { zentrale.notify(e.message, 'err'); }
+  };
+  if ($('#del')) $('#del').onclick = async () => { if (!confirm('Agent löschen?')) return; await zentrale.agents.remove(a.id); cur = null; await load(); intro(); };
+  if ($('#toChat')) $('#toChat').onclick = () => zentrale.open('ki-chat', { agent: a.id });
+  if ($('#run')) $('#run').onclick = async () => {
+    if (ctrl) { ctrl.abort(); return; }
+    const task = $('#task').value.trim(); if (!task) return;
+    const project = $('#runProj').value;
+    if (a.mode !== 'chat' && !project) return zentrale.notify('Dieser Agent ändert Dateien – bitte ein Projekt wählen.', 'warn');
+    const provider = $('#runProv').value || a.provider || (await zentrale.settings.get()).defaultProvider || 'claude';
+    $('#out').style.display = ''; $('#tools').innerHTML = ''; $('#text').innerHTML = '<span class="muted">arbeitet …</span>';
+    ctrl = new AbortController(); $('#run').textContent = '■ Stopp';
+    try {
+      const r = await zentrale.ki.ask({ agent: a.id, provider, mode: project ? a.mode : 'chat', project: project || undefined, prompt: task, signal: ctrl.signal,
+        onChunk: (_, all) => { $('#text').innerHTML = renderMarkdown(all); },
+        onTool: (t) => { const d = document.createElement('div'); const i = t.input || {}; d.textContent = `${t.name} ${i.file_path || i.path || i.command || ''}`; $('#tools').appendChild(d); } });
+      if (!r.text) $('#text').textContent = r.error || 'Keine Antwort – Modell angemeldet?';
+    } catch (e) { if (e.name !== 'AbortError') $('#text').textContent = e.message; }
+    finally { ctrl = null; $('#run').textContent = '▶ Ausführen'; }
+  };
+}
+
+$('#list').onclick = (e) => { const it = e.target.closest('[data-id]'); if (it) edit(agents.find(a => a.id === it.dataset.id)); };
+$('#q').oninput = renderList;
+$('#add').onclick = () => edit({ icon: '◆', name: 'Neuer Agent', description: '', provider: '', mode: 'chat', skills: [], instructions: '' });
+
+(async () => {
+  const [st, pr] = await Promise.all([zentrale.ki.status(), zentrale.projects.list().catch(() => ({ items: [] }))]);
+  providers = st; projects = pr.items.map(p => p.name);
+  await load(); intro();
+  zentrale.onParams((p) => { if (p.agent) { const a = agents.find(x => x.id === p.agent); if (a) edit(a); } });
+})();
+</script>
+</body></html>

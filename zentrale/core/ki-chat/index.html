@@ -22,6 +22,9 @@
   .agentbar { padding: 6px 12px; font-size: 12px; background: var(--cyan-soft); color: var(--cyan); border-bottom: 1px solid var(--line); display: none; }
   .agentbar.on { display: block; }
   .agentbar.full { background: #ff6b6b22; color: var(--red); }
+  .skillpanel { padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--bg-deep); }
+  .skillpanel label { display: inline-flex; gap: 5px; align-items: center; padding: 3px 8px; border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; margin: 0 6px 6px 0; font-size: 13px; }
+  .skillpanel label:has(input:checked) { border-color: var(--cyan); color: var(--cyan); }
   .welcome { margin: auto; text-align: center; max-width: 520px; }
   @media (max-width: 760px) { body { grid-template-columns: 1fr; } .chats { display: none; } body.list .chats { display: flex; position: fixed; inset: 0; z-index: 5; } }
 </style></head>
@@ -41,10 +44,13 @@
       <option value="full">⚠ Agent: alles (auch Befehle)</option>
     </select>
     <select class="input" id="proj" title="Projekt, in dem die KI arbeitet"><option value="">— kein Projekt —</option></select>
+    <select class="input" id="agent" title="Agent: feste Rolle mit Anweisungen und Skills"><option value="">◆ kein Agent</option></select>
+    <button class="btn" id="skillsBtn" type="button" title="Skills für diesen Chat">✧ Skills</button>
     <span class="grow"></span>
     <select class="input" id="prompts" title="Prompt-Vorlage einfügen"><option value="">❝ Vorlage …</option></select>
   </div>
   <div class="agentbar" id="agentbar"></div>
+  <div class="skillpanel" id="skillpanel" hidden></div>
   <div id="log"></div>
   <form id="f">
     <textarea class="input" id="q" placeholder="Nachricht … (Strg+Enter sendet)"></textarea>
@@ -57,13 +63,13 @@
 const $ = (s) => document.querySelector(s);
 const { esc } = zentrale.util;
 let state = { chats: [], current: null };
-let providers = [], ctrl = null, chefModel = 'claude';
+let providers = [], ctrl = null, chefModel = 'claude', agents = [], skills = [];
 
 const chat = () => state.chats.find(c => c.id === state.current);
 const save = () => zentrale.store.set({ chats: state.chats.slice(-50), current: state.current });
 
 function newChat(opts = {}) {
-  const s = { provider: 'chef', model: '', mode: 'chat', project: '' }; // neue Chats laufen über die Chef-KI
+  const s = { provider: 'chef', model: '', mode: 'chat', project: '', agent: '', skills: [] }; // neue Chats laufen über die Chef-KI
   const c = { id: Date.now().toString(36), title: 'Neuer Chat', created: Date.now(), messages: [], session: null, ...s, ...opts };
   state.chats.push(c); state.current = c.id;
   render(); save();
@@ -104,6 +110,7 @@ function render() {
   $('#log').innerHTML = '';
   if (!c) { $('#log').innerHTML = `<div class="welcome muted"><h2>✦ KI-Chat</h2>Stell eine Frage – oder wähle ein Projekt und einen Agent-Modus, damit die KI direkt in deinem Code arbeitet.</div>`; updateAgentBar(); return; }
   $('#prov').value = c.provider; $('#model').value = c.model || ''; $('#mode').value = c.mode; $('#proj').value = c.project || '';
+  $('#agent').value = c.agent || ''; setSkillChecks(c.skills || []);
   c.messages.forEach(m => $('#log').appendChild(msgEl(m)));
   $('#log').scrollTop = 1e9;
   updateAgentBar();
@@ -122,12 +129,27 @@ function syncSettings() {
   updateAgentBar();
   const c = chat();
   if (!c) return;
-  const s = { provider: $('#prov').value, model: $('#model').value.trim(), mode: $('#mode').value, project: $('#proj').value };
+  const s = { provider: $('#prov').value, model: $('#model').value.trim(), mode: $('#mode').value, project: $('#proj').value, agent: $('#agent').value, skills: checkedSkills() };
   if (c.messages.length && (s.provider !== c.provider || s.project !== c.project)) {
     newChat(s); // Modell- oder Projektwechsel -> neuer Chat (Sitzung passt sonst nicht)
   } else { Object.assign(c, s); save(); }
 }
 ['#prov', '#mode', '#proj'].forEach(s => $(s).onchange = syncSettings);
+// Agent wählen: Rechte des Agenten übernehmen
+$('#agent').onchange = () => {
+  const a = agents.find(x => x.id === $('#agent').value);
+  if (a && a.mode !== 'chat' && $('#mode').value === 'chat') $('#mode').value = a.mode;
+  syncSettings(); updateSkillBtn();
+};
+function checkedSkills() { return [...document.querySelectorAll('#skillpanel input:checked')].map(i => i.value); }
+function setSkillChecks(ids) { document.querySelectorAll('#skillpanel input').forEach(i => i.checked = ids.includes(i.value)); updateSkillBtn(); }
+function updateSkillBtn() {
+  const n = checkedSkills().length;
+  $('#skillsBtn').textContent = n ? `✧ Skills (${n})` : '✧ Skills';
+  $('#skillsBtn').classList.toggle('primary', n > 0);
+}
+$('#skillsBtn').onclick = () => { $('#skillpanel').hidden = !$('#skillpanel').hidden; };
+$('#skillpanel').onchange = () => { syncSettings(); updateSkillBtn(); };
 $('#model').onchange = syncSettings;
 
 function buildPrompt(c, text) {
@@ -143,7 +165,7 @@ function askViaChef(c, prompt, el, am, signal) {
   return new Promise(async (resolve, reject) => {
     let run;
     try {
-      run = await zentrale.team.start({ recipe: 'chef', task: prompt, project: c.project || undefined, mode: c.mode, roles: { chef: chefModel }, title: prompt.split('\n').pop().slice(0, 70) });
+      run = await zentrale.team.start({ recipe: 'chef', task: prompt, project: c.project || undefined, mode: c.mode, roles: { chef: chefModel }, skills: c.skills || [], title: prompt.split('\n').pop().slice(0, 70) });
     } catch (e) { return reject(e); }
     const outs = {};
     let current = null;
@@ -201,7 +223,7 @@ async function send() {
   const el = msgEl(am); $('#log').appendChild(el); $('#log').scrollTop = 1e9;
   ctrl = new AbortController(); $('#send').textContent = '■ Stopp';
   try {
-    if (c.provider === 'chef') {
+    if (c.provider === 'chef' && !c.agent) {
       const t0 = Date.now();
       const r = await askViaChef(c, prompt, el, am, ctrl.signal);
       am.text = r.text; setBody(el, am);
@@ -211,8 +233,13 @@ async function send() {
       zentrale.events.emit('ki.answer', { provider: 'chef', project: c.project, mode: c.mode });
       return;
     }
+    // Mit Agent: das gewählte Modell arbeitet in der Rolle des Agenten (bei Chef: Modell des Agenten oder Chef-Modell)
+    const ag = c.agent ? agents.find(x => x.id === c.agent) : null;
+    const prov = c.provider === 'chef' ? ((ag && ag.provider) || chefModel) : c.provider;
+    if (ag) { am.who = `${ag.icon} ${ag.name} · ${prov}`; el.querySelector('.who span').textContent = am.who; }
     const r = await zentrale.ki.ask({
-      provider: c.provider, model: c.model, mode: c.mode, project: c.project || undefined, session: c.session || undefined,
+      provider: prov, model: c.model, mode: c.mode, project: c.project || undefined, session: prov === 'claude' ? c.session || undefined : undefined,
+      agent: c.agent || undefined, skills: c.skills && c.skills.length ? c.skills : undefined,
       prompt, signal: ctrl.signal,
       onChunk: (_, all) => { am.text = all; setBody(el, am); $('#log').scrollTop = 1e9; },
       onTool: (t) => { am.tools.push({ name: t.name, input: t.input }); addTool(el, t); },
@@ -256,9 +283,13 @@ zentrale.events.on('store.changed', (s) => { if (s.id === 'prompts') loadPrompts
 
 
 (async () => {
-  const [st, saved, settings, projects] = await Promise.all([
+  const [st, saved, settings, projects, ag, sk] = await Promise.all([
     zentrale.ki.status(), zentrale.store.get(), zentrale.settings.get(), zentrale.projects.list().catch(() => ({ items: [] })),
+    zentrale.agents.list().catch(() => []), zentrale.skills.list().catch(() => []),
   ]);
+  agents = ag; skills = sk;
+  $('#agent').innerHTML = '<option value="">◆ kein Agent</option>' + agents.map(a => `<option value="${esc(a.id)}">${esc(a.icon)} ${esc(a.name)}</option>`).join('');
+  $('#skillpanel').innerHTML = skills.map(x => `<label title="${esc(x.description)}"><input type="checkbox" value="${esc(x.id)}">${esc(x.name)}</label>`).join('') || '<span class="muted small">Noch keine Skills – siehe Werkzeug „Skills“.</span>';
   providers = st;
   chefModel = (st.find(p => p.id === (settings.defaultProvider || 'claude') && p.installed && p.loggedIn !== false) || st.find(p => p.installed && p.loggedIn !== false && p.id !== 'ollama') || { id: 'claude' }).id;
   $('#prov').innerHTML = `<option value="chef">🧭 Chef-KI (entscheidet selbst)</option>` + st.map(p => `<option value="${p.id}" ${p.installed ? '' : 'disabled'}>${esc(p.name)}${p.installed ? (p.loggedIn === false ? ' (nicht angemeldet)' : '') : ' (fehlt)'}</option>`).join('');
@@ -270,6 +301,7 @@ zentrale.events.on('store.changed', (s) => { if (s.id === 'prompts') loadPrompts
   loadPrompts();
   // erst nach dem Laden, sonst überschreibt der gespeicherte Zustand die Parameter
   zentrale.onParams((p) => {
+    if (p.agent) { const a = agents.find(x => x.id === p.agent); newChat({ agent: p.agent, mode: 'chat', title: a ? `${a.icon} ${a.name}` : 'Neuer Chat' }); }
     if (p.project !== undefined || p.mode) newChat({ project: p.project || '', mode: p.mode || 'chat' });
     if (p.prompt) { $('#q').value = p.prompt; $('#q').focus(); $('#q').oninput(); }
   });

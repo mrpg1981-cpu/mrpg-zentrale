@@ -81,13 +81,41 @@ Vor dem Start zeigt die Zentrale an, **wie viele Anfragen ungefähr** anfallen. 
 Tests werden automatisch erkannt: `npm test`, `pytest`, `cargo test` oder `go test`.
 Aus eigenen Modulen: `zentrale.team.start({ recipe: 'chef', task, roles: { chef: 'claude' }, project, mode })`.
 
+## ✧ Skills und ◆ Agenten: von allen KIs nutzbar
+
+- **Skill** = eine wiederverwendbare Anleitung im Claude-Code-Format (`SKILL.md` mit `name` und `description`), z. B. Code-Review, Commit-Nachricht oder Logistik-Analyse.
+- **Agent** = eine feste Rolle aus Anweisungen, Skills und Rechten, z. B. Code-Reviewer, Bug-Jäger oder Logistik-Assistent. Er ist **an kein Modell gebunden**, jede KI kann ihn ausführen.
+
+| Wo | Wie |
+|---|---|
+| KI-Chat | Oben Agent und Skills wählen |
+| Chef-KI | Kennt alle Agenten und Skills und gibt passende selbst weiter |
+| KI-Team | Jede Rolle kann ein Agent sein, dazu Skills für alle Schritte |
+| Eigene Module | `zentrale.agents.run('code-reviewer', { prompt })` oder `zentrale.ki.ask({ provider, skills: ['code-review'], prompt })` |
+
+Mitgelieferte Vorlagen liegen in `library/`, eigene in `data/skills/` und `data/agents/`.
+
+## Module mit eigenem Server (z. B. Commander)
+
+```json
+{ "name": "Commander", "icon": "⇄", "backend": { "cmd": "node server.js" } }
+```
+Beim ersten Öffnen erledigt die Zentrale Folgendes:
+- Sie startet den Server des Moduls auf einem freien Port und übergibt diesen als `PORT`.
+- Falls nötig, führt sie vorher `npm install` aus.
+- Sie leitet `/m/<id>/…` an den Server des Moduls weiter. Der Zugriff ist durch das Zentrale-Passwort geschützt.
+
+Der Server erscheint unter **Prozesse** mit Live-Log.
+**Wichtig für eigene Apps:** im Frontend relative URLs verwenden (`fetch('api/…')` statt `fetch('/api/…')`).
+
 ## Ordner
 ```
 server.js        Kern: Routen, Anmeldung, WebSocket
 lib/             Dienste: ki, files, procs, terminal, system, auth, settings
 ui/              Dashboard, theme.css (Design-Tokens), zentrale-sdk.js, md.js
 core/            eingebaute Werkzeuge (Projekte, Terminal, KI-Chat …)
-modules/         DEINE Apps – jeder Ordner ist ein Modul
+modules/         DEINE Apps – jeder Ordner ist ein Modul (z. B. commander/)
+library/         mitgelieferte Skills und Agenten
 modules/_vorlage Vorlage für neue Module
 runtime/         portable Programme (node/, bin/), werden vor dem System-PATH gesucht
 data/            Passwort, Einstellungen, Logins, Chats, Notizen (nicht im Git)

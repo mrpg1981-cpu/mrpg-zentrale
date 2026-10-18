@@ -64,11 +64,11 @@
       install: (provider) => api('POST', '/api/ki/install', { provider }),
       // mode: 'chat' | 'edit' | 'full'; project: Ordner im Projektordner (Agent arbeitet dort)
       // session: nur Claude – Gespräch fortsetzen (kommt als result.session zurück)
-      async ask({ provider, prompt, model, mode = 'chat', project, session, onChunk, onTool, onLog, signal } = {}) {
-        if (!provider) provider = (await zentrale.settings.get()).defaultProvider || 'claude';
+      async ask({ provider, prompt, model, mode, project, session, agent, skills, onChunk, onTool, onLog, signal } = {}) {
+        if (!provider && !agent) provider = (await zentrale.settings.get()).defaultProvider || 'claude';
         const res = await fetch('/api/ki/ask', {
           method: 'POST', signal, headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider, prompt, model, mode, project, session }),
+          body: JSON.stringify({ provider, prompt, model, mode, project, session, agent, skills }),
         });
         if (!res.ok) throw new Error((await res.json()).error);
         let full = '', error = null, done = null, sid = null;
@@ -118,6 +118,20 @@
       create: ({ project, title, input } = {}) => api('POST', '/api/terminals', { project, title, input }),
       kill: (id) => api('DELETE', '/api/terminals/' + id),
       socketUrl: (id) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/terminal/${id}`,
+    },
+
+    // Skills (Anleitungen) und Agenten (feste Rollen) – jede KI kann sie nutzen.
+    // Nutzung: zentrale.ki.ask({ agent: 'code-reviewer', prompt }) oder ({ provider: 'gemini', skills: ['code-review'], prompt })
+    skills: {
+      list: () => api('GET', '/api/skills'),
+      save: (skill) => api('PUT', '/api/skills', skill),
+      remove: (id) => api('DELETE', '/api/skills/' + id),
+    },
+    agents: {
+      list: () => api('GET', '/api/agents'),
+      save: (agent) => api('PUT', '/api/agents', agent),
+      remove: (id) => api('DELETE', '/api/agents/' + id),
+      run: (id, opts = {}) => zentrale.ki.ask({ ...opts, agent: id }),
     },
 
     // KI-Team: mehrere Modelle arbeiten zusammen

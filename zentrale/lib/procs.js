@@ -23,14 +23,14 @@ module.exports = function createProcs({ runEnv, emit }) {
     }
   }
 
-  function start({ name, cmd, cwd }) {
+  function start({ name, cmd, cwd, env, module }) {
     if (!cmd) throw Object.assign(new Error('Befehl fehlt'), { status: 400 });
     const id = crypto.randomBytes(4).toString('hex');
     const child = spawn(cmd, {
-      cwd, shell: true, env: { ...runEnv(), FORCE_COLOR: '0' },
+      cwd, shell: true, env: { ...runEnv(), FORCE_COLOR: '0', ...(env || {}) },
       detached: process.platform !== 'win32', // eigene Prozessgruppe -> ganzen Baum stoppen
     });
-    const p = { id, name: name || cmd, cmd, cwd, pid: child.pid, status: 'läuft', code: null, started: Date.now(), ended: null, log: [], subs: new Set(), child };
+    const p = { id, name: name || cmd, cmd, cwd, module: module || null, pid: child.pid, status: 'läuft', code: null, started: Date.now(), ended: null, log: [], subs: new Set(), child };
     procs.set(id, p);
     child.stdout.on('data', (d) => push(p, 'out', d.toString()));
     child.stderr.on('data', (d) => push(p, 'err', d.toString()));

@@ -1,0 +1,8 @@
+{
+  "name": "Commander",
+  "icon": "⇄",
+  "order": 10,
+  "group": "Module",
+  "description": "Zwei-Fenster-Dateimanager für SFTP, FTP und FTPS (Norton-Commander-Stil).",
+  "backend": { "cmd": "node server.js" }
+}
