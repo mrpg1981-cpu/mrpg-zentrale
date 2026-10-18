@@ -1,0 +1,16 @@
+{
+  "name": "mrpg-zentrale",
+  "version": "4.1.0",
+  "private": true,
+  "description": "MRPG Zentrale – Dashboard für alle Projekte und KI-Modelle",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "dependencies": {
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/xterm": "5.5.0",
+    "ws": "8.18.0"
+  },
+  "optionalDependencies": {
+    "node-pty": "1.0.0"
+  }
+}

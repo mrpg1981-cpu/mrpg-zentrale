@@ -1,55 +1,97 @@
-# 〄 MRPG Zentrale v4
+# 〄 MRPG Zentrale
 
-Die Zentrale für alle Projekte, Apps und KI-Modelle. Sie läuft portabel aus einem Ordner oder im Docker-Container.
+Die Zentrale für alle Projekte, Apps und KI-Modelle, im MrPG.dev-Design.
+Sie läuft **portabel** aus einem Ordner oder im **Docker-Container** (z. B. auf CachyOS).
 
 ## Start
 
 **Portabel (Linux, CachyOS, Windows)**
 ```sh
-./start.sh          # Linux
-start.bat           # Windows
+./start.sh            # Linux / CachyOS
+start.bat             # Windows
 ```
-Danach öffnet sich der Browser auf http://localhost:7777.
+Beim ersten Start installiert das Skript die Pakete (`npm install`) und öffnet http://localhost:7777.
+Dort legst du dann ein **Passwort** fest.
 
 **Docker (CachyOS)**
 ```sh
-docker compose up -d --build
+PROJEKTE=~/Projekte docker compose up -d --build
 ```
+Danach http://localhost:7777 öffnen. Für Zugriff aus dem LAN den Port in `docker-compose.yml` freigeben.
+
+## Was drin ist
+
+| Bereich | Werkzeug | Funktion |
+|---|---|---|
+| Arbeit | **Projekte** | Alle Ordner im Projektordner mit Git-Status, Skripten aus `package.json`, Docker-Compose und Klonen |
+| | **Dateien** | Durchsuchen, bearbeiten (Strg+S), umbenennen, löschen, Bildvorschau, „KI fragen“ |
+| | **Terminal** | Echte Shell (xterm + node-pty), mehrere Sitzungen, bleiben beim Neuladen erhalten |
+| | **Prozesse** | Dev-Server und Builds starten/stoppen, Live-Log, Meldung, wenn ein Prozess fertig ist |
+| | **Notizen** | Notizen und Aufgaben, allgemein oder pro Projekt |
+| KI | **KI-Chat** | Chat oder **Agent im Projekt** (Dateien ändern / alles), mehrere Chats, Vorlagen |
+| | **KI-Vergleich** | Eine Frage gleichzeitig an alle Modelle |
+| | **Prompts** | Vorlagen-Bibliothek mit dem Platzhalter `{{eingabe}}` |
+| | **KI-Konten** | Installieren, Anmelden, Abmelden und Nutzungsstatistik |
+| System | **System** | CPU, RAM, Speicher, Docker-Container, Event-Bus |
+| | **Einstellungen** | Projektordner, Standard-KI, Hell/Dunkel, Akzentfarbe, Passwort, Backup/Restore, Update |
+
+Dazu kommen: Befehlspalette (**Strg+K**), Toasts und Desktop-Benachrichtigungen, Installation als App (PWA) und eine Ansicht für das Handy.
 
 ## KI-Modelle: Login mit deinem Abo, ohne API-Keys
-| Modell | Anmelden (portabel) | Anmelden (Docker) |
-|---|---|---|
-| Claude | `./start.sh login claude` | `docker exec -it mrpg-zentrale node server.js login claude` |
-| Codex | `./start.sh login codex` | `docker exec -it mrpg-zentrale node server.js login codex` |
-| Gemini | `./start.sh login gemini` | `docker exec -it mrpg-zentrale node server.js login gemini` |
-| Ollama | kein Login, läuft lokal | – |
 
-Die Logins werden in `data/auth/<modell>/` gespeichert und bleiben dadurch im Zentrale-Ordner.
-Bei der portablen Version sucht die Zentrale die CLIs zuerst in `runtime/bin/` und danach im System-PATH.
+Unter **KI-Konten** installierst du die CLI und meldest dich an. Die Anmeldung öffnet sich im Terminal der Zentrale.
+Die Logins liegen in `data/auth/<modell>/`.
+
+| Modell | CLI | Login |
+|---|---|---|
+| Claude | `claude` (Claude Code) | Claude Pro/Max |
+| Codex | `codex` | ChatGPT Plus/Pro |
+| Gemini | `gemini` | Google-Konto |
+| Ollama | `ollama` | kein Login, läuft lokal |
+
+Alternativ über die Kommandozeile: `./start.sh login claude`
+
+**Agent-Modi im KI-Chat:**
+- 💬 **Nur Chat:** Die KI antwortet nur.
+- ✎ **Dateien ändern:** Die KI darf im gewählten Projekt Dateien bearbeiten.
+- ⚠ **Alles:** Die KI darf zusätzlich beliebige Befehle ausführen. Nur nutzen, wenn du ihr vertraust.
 
 ## Ordner
 ```
-server.js         Kern: Modul-Loader, KI-Hub, Event-Bus, Store
-ui/               Dashboard und theme.css (MrPG.dev-Design-Tokens)
-modules/<id>/     ein Modul = module.json + index.html
-runtime/          portable Programme (node/, bin/)
-data/             Logins, Speicher, Verlauf (nicht im Git)
+server.js        Kern: Routen, Anmeldung, WebSocket
+lib/             Dienste: ki, files, procs, terminal, system, auth, settings
+ui/              Dashboard, theme.css (Design-Tokens), zentrale-sdk.js, md.js
+core/            eingebaute Werkzeuge (Projekte, Terminal, KI-Chat …)
+modules/         DEINE Apps – jeder Ordner ist ein Modul
+modules/_vorlage Vorlage für neue Module
+runtime/         portable Programme (node/, bin/), werden vor dem System-PATH gesucht
+data/            Passwort, Einstellungen, Logins, Chats, Notizen (nicht im Git)
 ```
 
 ## Eigenes Modul bauen
-`modules/mein-modul/module.json`
-```json
-{ "name": "Mein Modul", "icon": "★", "order": 50, "description": "…" }
+```sh
+node server.js new-module mein-tool "Mein Tool"
 ```
-`modules/mein-modul/index.html`
-```html
-<link rel="stylesheet" href="/theme.css">
-<script src="/zentrale-sdk.js"></script>
-<script>
-  zentrale.ki.ask({ provider: 'claude', prompt: 'Hallo', onChunk: (t, all) => console.log(all) });
-  zentrale.store.set({ x: 1 });                 // eigener Speicher
-  zentrale.events.emit('datei.offen', { pfad }); // an andere Module senden
-  zentrale.events.on('datei.offen', p => …);     // empfangen
-  zentrale.open('ki-chat');                      // anderes Modul öffnen
-</script>
+Das legt `modules/mein-tool/` aus der Vorlage an. Nach einem Neuladen erscheint es im Dashboard.
+In jedem Modul steht `window.zentrale` zur Verfügung:
+
+```js
+zentrale.ki.ask({ provider, prompt, mode, project, onChunk })  // KI
+zentrale.fs.list(pfad) / read(pfad) / write(pfad, inhalt)      // Dateien im Projektordner
+zentrale.run.start({ cmd, project }) / follow(id, {onLine})    // Prozesse
+zentrale.terminal.create({ project })                          // Terminal
+zentrale.projects.list()                                       // Projekte
+zentrale.store.get() / set(obj)                                // eigener Speicher
+zentrale.store.get('prompts')                                  // gemeinsamer Speicher
+zentrale.events.emit(typ, daten) / on(typ, fn)                 // Nachrichten zwischen Modulen
+zentrale.notify('Fertig!', 'ok')                               // Toast
+zentrale.open('terminal', { project: 'xyz' })                  // anderes Modul öffnen
+zentrale.onParams(p => …)                                      // Parameter empfangen
 ```
+Das Design übernimmst du mit `<link rel="stylesheet" href="/theme.css">`. Klassen: `btn`, `btn primary`, `input`, `card`, `page`, `grid`, `row`, `toolbar`, `badge`, `log` …
+
+## Sicherheit
+- Ohne Passwort kommt niemand rein. Nach 5 Fehlversuchen ist die Anmeldung 1 Minute gesperrt.
+- Dateizugriff ist auf den Projektordner beschränkt, auch über symbolische Links lässt er sich nicht verlassen.
+- Standardmäßig lauscht die Zentrale nur auf `127.0.0.1`. Fürs LAN `HOST=0.0.0.0` setzen.
+- Passwort vergessen: `node server.js reset-password`

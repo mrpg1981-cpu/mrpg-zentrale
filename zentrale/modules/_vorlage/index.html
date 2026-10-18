@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mein Modul</title>
+<link rel="stylesheet" href="/theme.css">  <!-- MrPG.dev-Design -->
+</head>
+<body><div class="page">
+  <h2>★ Mein Modul</h2>
+  <div class="card">
+    <div class="row">
+      <input class="input grow" id="q" placeholder="Frag die KI …">
+      <button class="btn primary" id="go">Fragen</button>
+    </div>
+    <div id="out" style="margin-top:12px;white-space:pre-wrap"></div>
+  </div>
+</div>
+<script src="/zentrale-sdk.js"></script>
+<script>
+// Alles, was die Zentrale bietet, steckt in window.zentrale:
+//   zentrale.ki.ask({ provider, prompt, mode, project, onChunk })  – KI über die CLIs
+//   zentrale.fs.list/read/write(...)                                – Dateien im Projektordner
+//   zentrale.run.start({ cmd, project })                            – Prozesse starten
+//   zentrale.store.get() / set(obj)                                 – eigener Speicher
+//   zentrale.events.emit(type, data) / on(type, fn)                 – mit anderen Modulen reden
+//   zentrale.notify(text, 'ok')                                     – Toast im Dashboard
+//   zentrale.open('terminal', { project: 'xyz' })                   – anderes Modul öffnen
+const $ = (s) => document.querySelector(s);
+$('#go').onclick = async () => {
+  $('#out').textContent = '…';
+  await zentrale.ki.ask({ prompt: $('#q').value, onChunk: (_, all) => { $('#out').textContent = all; } });
+};
+</script>
+</body></html>

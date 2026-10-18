@@ -1,0 +1,7 @@
+{
+  "name": "Mein Modul",
+  "icon": "★",
+  "order": 100,
+  "group": "Module",
+  "description": "Kurze Beschreibung für die Startseite."
+}

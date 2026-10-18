@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KI-Chat</title><link rel="stylesheet" href="/theme.css">
+<style>
+  body { height: 100vh; display: grid; grid-template-columns: 230px 1fr; }
+  .chats { background: var(--bg-deep); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  #chatList { flex: 1; overflow: auto; padding: 6px; }
+  .chat { padding: 8px; border-radius: var(--radius); cursor: pointer; color: var(--muted); display: flex; gap: 6px; }
+  .chat:hover, .chat.active { background: var(--cyan-soft); color: var(--cyan); }
+  .chat .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat .x { opacity: 0; } .chat:hover .x { opacity: .6; } .chat .x:hover { opacity: 1; color: var(--red); }
+  .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  #log { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 900px; line-height: 1.55; overflow-wrap: anywhere; }
+  .msg.user { align-self: flex-end; background: var(--cyan-soft); border-color: var(--cyan); white-space: pre-wrap; }
+  .msg .who { font: 11px var(--mono); color: var(--cyan); margin-bottom: 6px; display: flex; gap: 8px; }
+  .msg.err { border-color: var(--red); }
+  .tools { font: 11.5px var(--mono); color: var(--muted); margin-bottom: 6px; }
+  .tools div::before { content: '⚙ '; color: var(--yellow); }
+  form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); background: var(--bg-deep); align-items: flex-end; }
+  #q { flex: 1; resize: none; min-height: 64px; max-height: 40vh; }
+  .agentbar { padding: 6px 12px; font-size: 12px; background: var(--cyan-soft); color: var(--cyan); border-bottom: 1px solid var(--line); display: none; }
+  .agentbar.on { display: block; }
+  .agentbar.full { background: #ff6b6b22; color: var(--red); }
+  .welcome { margin: auto; text-align: center; max-width: 520px; }
+  @media (max-width: 760px) { body { grid-template-columns: 1fr; } .chats { display: none; } body.list .chats { display: flex; position: fixed; inset: 0; z-index: 5; } }
+</style></head>
+<body>
+<aside class="chats">
+  <div class="toolbar"><button class="btn primary grow" id="newChat">＋ Neuer Chat</button></div>
+  <div id="chatList"></div>
+</aside>
+<div class="main">
+  <div class="toolbar">
+    <button class="btn sm" id="listBtn" title="Chats">☰</button>
+    <select class="input" id="prov" title="Modell"></select>
+    <input class="input mono" id="model" placeholder="Modell (optional)" style="width:150px">
+    <select class="input" id="mode" title="Was darf die KI?">
+      <option value="chat">💬 Nur Chat</option>
+      <option value="edit">✎ Agent: Dateien ändern</option>
+      <option value="full">⚠ Agent: alles (auch Befehle)</option>
+    </select>
+    <select class="input" id="proj" title="Projekt, in dem die KI arbeitet"><option value="">— kein Projekt —</option></select>
+    <span class="grow"></span>
+    <select class="input" id="prompts" title="Prompt-Vorlage einfügen"><option value="">❝ Vorlage …</option></select>
+  </div>
+  <div class="agentbar" id="agentbar"></div>
+  <div id="log"></div>
+  <form id="f">
+    <textarea class="input" id="q" placeholder="Nachricht … (Strg+Enter sendet)"></textarea>
+    <button class="btn primary" id="send">Senden</button>
+  </form>
+</div>
+<script src="/zentrale-sdk.js"></script>
+<script src="/md.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc } = zentrale.util;
+let state = { chats: [], current: null };
+let providers = [], ctrl = null;
+
+const chat = () => state.chats.find(c => c.id === state.current);
+const save = () => zentrale.store.set({ chats: state.chats.slice(-50), current: state.current });
+
+function newChat(opts = {}) {
+  const s = { provider: $('#prov').value, model: $('#model').value.trim(), mode: 'chat', project: '' };
+  const c = { id: Date.now().toString(36), title: 'Neuer Chat', created: Date.now(), messages: [], session: null, ...s, ...opts };
+  state.chats.push(c); state.current = c.id;
+  render(); save();
+  return c;
+}
+
+function renderList() {
+  $('#chatList').innerHTML = [...state.chats].reverse().map(c => `
+    <div class="chat ${c.id === state.current ? 'active' : ''}" data-id="${c.id}">
+      <span>${c.mode !== 'chat' ? '✎' : '💬'}</span><span class="t">${esc(c.title)}</span><span class="x" data-del="${c.id}">✕</span>
+    </div>`).join('') || '<div class="empty">Noch keine Chats.</div>';
+}
+
+function msgEl(m) {
+  const d = document.createElement('div');
+  d.className = `card msg ${m.role}${m.error ? ' err' : ''}`;
+  d.innerHTML = `<div class="who"><span></span><span class="muted meta"></span></div><div class="tools"></div><div class="body md"></div>`;
+  d.querySelector('.who span').textContent = m.who;
+  if (m.meta) d.querySelector('.meta').textContent = m.meta;
+  (m.tools || []).forEach(t => addTool(d, t));
+  setBody(d, m);
+  return d;
+}
+function setBody(d, m) {
+  const b = d.querySelector('.body');
+  if (m.role === 'user') b.textContent = m.text; else b.innerHTML = renderMarkdown(m.text || '…');
+}
+function addTool(d, t) {
+  const el = document.createElement('div');
+  const i = t.input || {};
+  el.textContent = `${t.name} ${i.file_path || i.path || i.command || i.pattern || i.url || ''}`.trim();
+  d.querySelector('.tools').appendChild(el);
+}
+
+function render() {
+  renderList();
+  const c = chat();
+  $('#log').innerHTML = '';
+  if (!c) { $('#log').innerHTML = `<div class="welcome muted"><h2>✦ KI-Chat</h2>Stell eine Frage – oder wähle ein Projekt und einen Agent-Modus, damit die KI direkt in deinem Code arbeitet.</div>`; updateAgentBar(); return; }
+  $('#prov').value = c.provider; $('#model').value = c.model || ''; $('#mode').value = c.mode; $('#proj').value = c.project || '';
+  c.messages.forEach(m => $('#log').appendChild(msgEl(m)));
+  $('#log').scrollTop = 1e9;
+  updateAgentBar();
+}
+
+function updateAgentBar() {
+  const mode = $('#mode').value, proj = $('#proj').value;
+  const bar = $('#agentbar');
+  bar.className = 'agentbar' + (mode !== 'chat' ? ' on' : '') + (mode === 'full' ? ' full' : '');
+  bar.textContent = mode === 'edit' ? `Agent-Modus: Die KI darf Dateien in „${proj || '—'}“ lesen und ändern.` :
+    mode === 'full' ? `Achtung: Die KI darf in „${proj || '—'}“ Dateien ändern UND beliebige Befehle ausführen.` : '';
+}
+
+// Einstellungen des aktuellen Chats übernehmen, wenn noch keine Nachrichten drin sind
+function syncSettings() {
+  updateAgentBar();
+  const c = chat();
+  if (!c) return;
+  const s = { provider: $('#prov').value, model: $('#model').value.trim(), mode: $('#mode').value, project: $('#proj').value };
+  if (c.messages.length && (s.provider !== c.provider || s.project !== c.project)) {
+    newChat(s); // Modell- oder Projektwechsel -> neuer Chat (Sitzung passt sonst nicht)
+  } else { Object.assign(c, s); save(); }
+}
+['#prov', '#mode', '#proj'].forEach(s => $(s).onchange = syncSettings);
+$('#model').onchange = syncSettings;
+
+function buildPrompt(c, text) {
+  // Claude setzt die Sitzung selbst fort; andere Modelle bekommen den Verlauf mit
+  if (c.provider === 'claude' && c.session) return text;
+  const hist = c.messages.filter(m => !m.error).slice(-10);
+  if (!hist.length) return text;
+  return 'Bisheriger Gesprächsverlauf:\n' + hist.map(m => `${m.role === 'user' ? 'Nutzer' : 'Assistent'}: ${m.text}`).join('\n\n') + `\n\nNeue Nachricht des Nutzers:\n${text}`;
+}
+
+async function send() {
+  if (ctrl) { ctrl.abort(); return; }
+  const text = $('#q').value.trim(); if (!text) return;
+  let c = chat() || newChat({ mode: $('#mode').value, project: $('#proj').value });
+  if (c.mode !== 'chat' && !c.project) return zentrale.notify('Für den Agent-Modus bitte ein Projekt wählen.', 'warn');
+  $('#q').value = '';
+  const prompt = buildPrompt(c, text);
+  const um = { role: 'user', text, who: 'Du' };
+  c.messages.push(um); $('#log').appendChild(msgEl(um));
+  if (c.title === 'Neuer Chat') { c.title = text.slice(0, 50); renderList(); }
+
+  const pname = (providers.find(p => p.id === c.provider) || {}).name || c.provider;
+  const am = { role: 'ai', text: '', who: pname + (c.model ? ' · ' + c.model : ''), tools: [] };
+  const el = msgEl(am); $('#log').appendChild(el); $('#log').scrollTop = 1e9;
+  ctrl = new AbortController(); $('#send').textContent = '■ Stopp';
+  try {
+    const r = await zentrale.ki.ask({
+      provider: c.provider, model: c.model, mode: c.mode, project: c.project || undefined, session: c.session || undefined,
+      prompt, signal: ctrl.signal,
+      onChunk: (_, all) => { am.text = all; setBody(el, am); $('#log').scrollTop = 1e9; },
+      onTool: (t) => { am.tools.push({ name: t.name, input: t.input }); addTool(el, t); },
+    });
+    if (r.session) c.session = r.session;
+    if (!r.text) { am.text = r.error ? 'Fehler: ' + r.error : '(keine Antwort – bist du angemeldet? → KI-Konten)'; am.error = true; el.classList.add('err'); setBody(el, am); }
+    am.meta = `${(r.seconds || 0).toFixed(1)} s${r.costUsd ? ` · ≈ $${r.costUsd.toFixed(4)}` : ''}`;
+    el.querySelector('.meta').textContent = am.meta;
+    zentrale.events.emit('ki.answer', { provider: c.provider, project: c.project, mode: c.mode });
+    if (document.hidden || !document.hasFocus()) zentrale.notify(`✦ ${pname} hat geantwortet`, 'ok');
+  } catch (err) {
+    if (err.name === 'AbortError') { am.text += '\n\n*(abgebrochen)*'; setBody(el, am); }
+    else { am.error = true; am.text = 'Fehler: ' + err.message; el.classList.add('err'); setBody(el, am); }
+  } finally {
+    c.messages.push(am);
+    ctrl = null; $('#send').textContent = 'Senden'; save();
+  }
+}
+
+$('#f').onsubmit = (e) => { e.preventDefault(); send(); };
+$('#q').onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } };
+$('#q').oninput = () => { $('#q').style.height = 'auto'; $('#q').style.height = Math.min($('#q').scrollHeight, innerHeight * .4) + 'px'; };
+$('#newChat').onclick = () => { newChat({ mode: 'chat', project: '' }); document.body.classList.remove('list'); };
+$('#listBtn').onclick = () => document.body.classList.toggle('list');
+$('#chatList').onclick = (e) => {
+  const d = e.target.closest('[data-del]');
+  if (d) { state.chats = state.chats.filter(c => c.id !== d.dataset.del); if (state.current === d.dataset.del) state.current = (state.chats[state.chats.length - 1] || {}).id || null; render(); return save(); }
+  const c = e.target.closest('[data-id]'); if (c) { state.current = c.dataset.id; render(); save(); document.body.classList.remove('list'); }
+};
+
+async function loadPrompts() {
+  const p = (await zentrale.store.get('prompts')).items || [];
+  $('#prompts').innerHTML = '<option value="">❝ Vorlage …</option>' + p.map((x, i) => `<option value="${i}">${esc(x.title)}</option>`).join('');
+  $('#prompts').onchange = () => {
+    const x = p[$('#prompts').value]; $('#prompts').value = '';
+    if (!x) return;
+    $('#q').value = x.text.replace('{{eingabe}}', $('#q').value); $('#q').focus(); $('#q').oninput();
+  };
+}
+zentrale.events.on('store.changed', (s) => { if (s.id === 'prompts') loadPrompts(); });
+
+
+(async () => {
+  const [st, saved, settings, projects] = await Promise.all([
+    zentrale.ki.status(), zentrale.store.get(), zentrale.settings.get(), zentrale.projects.list().catch(() => ({ items: [] })),
+  ]);
+  providers = st;
+  $('#prov').innerHTML = st.map(p => `<option value="${p.id}" ${p.installed ? '' : 'disabled'}>${esc(p.name)}${p.installed ? (p.loggedIn === false ? ' (nicht angemeldet)' : '') : ' (fehlt)'}</option>`).join('');
+  $('#prov').value = settings.defaultProvider || 'claude';
+  $('#model').value = settings.defaultModel || '';
+  $('#proj').innerHTML += projects.items.map(p => `<option>${esc(p.name)}</option>`).join('');
+  state = { chats: saved.chats || [], current: saved.current || null };
+  render();
+  loadPrompts();
+  // erst nach dem Laden, sonst überschreibt der gespeicherte Zustand die Parameter
+  zentrale.onParams((p) => {
+    if (p.project !== undefined || p.mode) newChat({ project: p.project || '', mode: p.mode || 'chat' });
+    if (p.prompt) { $('#q').value = p.prompt; $('#q').focus(); $('#q').oninput(); }
+  });
+})();
+</script>
+</body></html>

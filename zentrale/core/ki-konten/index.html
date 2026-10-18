@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KI-Konten</title><link rel="stylesheet" href="/theme.css">
+<style>
+  .acc .row { margin-top: 10px; }
+  .acc h3 { margin: 0; display: flex; gap: 8px; align-items: center; }
+  .chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; padding: 10px 0 0; }
+  .chart .b { flex: 0 1 28px; display: flex; flex-direction: column-reverse; min-width: 6px; position: relative; }
+  .chart .b i { display: block; width: 100%; }
+  .chart .b:hover::after { content: attr(data-t); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); padding: 3px 6px; border-radius: 4px; font: 11px var(--mono); white-space: pre; z-index: 2; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+</style></head>
+<body><div class="page">
+<h2>⚿ KI-Konten</h2>
+<p class="muted">Die Zentrale nutzt die offiziellen Kommandozeilen-Programme mit deinem <b>Abo-Login</b> – keine API-Keys nötig.
+Logins liegen in <code>data/auth/</code> und bleiben im Zentrale-Ordner.</p>
+<div class="grid" id="acc"></div>
+
+<h2>Nutzung (letzte 30 Tage)</h2>
+<p class="muted small">Gezählt werden Anfragen über die Zentrale. Kosten werden nur angezeigt, wenn die CLI sie meldet (Claude: Rechenwert, bei Abo nicht berechnet). Die echten Abo-Limits zeigt die jeweilige CLI bzw. Website.</p>
+<div class="card"><div class="chart" id="chart"></div><div class="legend" id="legend"></div></div>
+<table class="list" id="sum" style="margin-top:12px"></table>
+</div>
+<script src="/zentrale-sdk.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc } = zentrale.util;
+const COLORS = { claude: '#d97757', codex: '#10a37f', gemini: '#4c8df6', ollama: '#b9bec7' };
+
+async function loadAccounts() {
+  const st = await zentrale.ki.status();
+  $('#acc').innerHTML = st.map(p => {
+    const state = !p.installed ? ['err', 'nicht installiert'] : p.loggedIn === false ? ['warn', 'nicht angemeldet'] : ['ok', p.loggedIn === null ? 'bereit (kein Login nötig)' : 'angemeldet'];
+    return `<div class="card acc">
+      <h3><span class="dot ${state[0]}"></span>${esc(p.name)}</h3>
+      <div class="muted small" style="margin-top:6px">${state[1]}</div>
+      <div class="muted small mono" style="margin-top:4px;overflow-wrap:anywhere">${esc(p.path || '')}</div>
+      <div class="row">
+        ${!p.installed && p.installable ? `<button class="btn primary sm" data-install="${p.id}">⬇ Installieren</button>` : ''}
+        ${!p.installed && p.id === 'ollama' ? `<a class="btn sm" href="https://ollama.com/download" target="_blank" rel="noopener">ollama.com</a>` : ''}
+        ${p.installed && p.loggedIn !== null ? `<button class="btn ${p.loggedIn ? '' : 'primary'} sm" data-login="${p.id}">${p.loggedIn ? '↻ Neu anmelden' : '→ Anmelden'}</button>` : ''}
+        ${p.loggedIn ? `<button class="btn danger sm" data-logout="${p.id}">Abmelden</button>` : ''}
+        ${p.installed && p.installable ? `<button class="btn sm" data-install="${p.id}" title="Neueste Version installieren">⟳ Update</button>` : ''}
+      </div></div>`;
+  }).join('');
+}
+
+$('#acc').onclick = async (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  try {
+    if (b.dataset.login) {
+      const t = await zentrale.ki.login(b.dataset.login);
+      zentrale.notify('Login im Terminal abschließen (Link öffnen / Code eingeben).', 'info');
+      zentrale.open('terminal', { terminal: t.id });
+    }
+    if (b.dataset.logout && confirm('Anmeldung wirklich entfernen?')) { await zentrale.ki.logout(b.dataset.logout); loadAccounts(); }
+    if (b.dataset.install) {
+      const pr = await zentrale.ki.install(b.dataset.install);
+      zentrale.open('prozesse', { id: pr.id });
+      const off = zentrale.events.on('proc.exit', (p) => { if (p.id === pr.id) { off(); loadAccounts(); } });
+    }
+  } catch (err) { zentrale.notify(err.message, 'err'); }
+};
+
+async function loadUsage() {
+  const days = await zentrale.ki.usage(30);
+  const ids = Object.keys(COLORS);
+  const max = Math.max(1, ...days.map(d => ids.reduce((s, id) => s + ((d[id] || {}).requests || 0), 0)));
+  $('#chart').innerHTML = days.length ? days.map(d => {
+    const tip = d.day + '\n' + ids.filter(id => d[id]).map(id => `${id}: ${d[id].requests}`).join('\n');
+    return `<div class="b" data-t="${esc(tip)}">${ids.map(id => d[id] ? `<i style="height:${(d[id].requests / max) * 110}px;background:${COLORS[id]}"></i>` : '').join('')}</div>`;
+  }).join('') : '<div class="empty" style="width:100%">Noch keine Anfragen.</div>';
+  $('#legend').innerHTML = ids.map(id => `<span><i style="background:${COLORS[id]}"></i>${id}</span>`).join('');
+  const tot = {};
+  for (const d of days) for (const id of ids) if (d[id]) {
+    const t = (tot[id] = tot[id] || { requests: 0, seconds: 0, costUsd: 0, inputTokens: 0, outputTokens: 0 });
+    for (const k in t) t[k] += d[id][k] || 0;
+  }
+  $('#sum').innerHTML = `<tr><th>Modell</th><th>Anfragen</th><th>Laufzeit</th><th>Tokens (ein/aus)</th><th>Rechenwert</th></tr>` +
+    (Object.entries(tot).map(([id, t]) => `<tr><td>${esc(id)}</td><td>${t.requests}</td><td>${Math.round(t.seconds / 60)} Min.</td><td class="mono">${t.inputTokens || '—'} / ${t.outputTokens || '—'}</td><td>${t.costUsd ? '$' + t.costUsd.toFixed(2) : '—'}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">—</td></tr>');
+}
+
+loadAccounts(); loadUsage();
+zentrale.events.on('ki.answer', loadUsage);
+</script>
+</body></html>

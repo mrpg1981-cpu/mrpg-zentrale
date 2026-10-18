@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Projekte</title><link rel="stylesheet" href="/theme.css">
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; }
+  .split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(260px, 380px) 1fr; }
+  #list { overflow: auto; border-right: 1px solid var(--line); }
+  .item { padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .item:hover, .item.active { background: var(--cyan-soft); }
+  .item.active b { color: var(--cyan); }
+  #detail { overflow: auto; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .kv { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; }
+  .kv span:nth-child(odd) { color: var(--muted); }
+  dialog { background: var(--bg-deep); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); width: min(440px, 92vw); }
+  dialog::backdrop { background: #0008; }
+  @media (max-width: 720px) { .split { grid-template-columns: 1fr; } #detail { display: none; } body.show-detail #list { display: none; } body.show-detail #detail { display: block; } }
+</style></head>
+<body>
+<div class="toolbar">
+  <input class="input grow" id="q" placeholder="Projekt suchen …">
+  <button class="btn" id="reload" title="Neu laden">↻</button>
+  <button class="btn primary" id="newBtn">＋ Neu / Klonen</button>
+</div>
+<div class="split">
+  <div id="list"></div>
+  <div id="detail"><div class="empty">Projekt auswählen.</div></div>
+</div>
+
+<dialog id="dlg"><form method="dialog" id="newForm">
+  <h2>Neues Projekt</h2>
+  <label class="field"><span>Name (Ordner)</span><input class="input" name="name" required pattern="[\w.\-]+" placeholder="mein-projekt"></label>
+  <label class="field"><span>Git-URL zum Klonen (optional)</span><input class="input" name="clone" placeholder="https://github.com/…/repo.git"></label>
+  <div class="row"><span class="grow"></span><button class="btn" value="cancel" formnovalidate>Abbrechen</button><button class="btn primary" value="ok">Anlegen</button></div>
+</form></dialog>
+
+<script src="/zentrale-sdk.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc, ago } = zentrale.util;
+let data = { items: [] }, current = null;
+
+async function load() {
+  data = await zentrale.projects.list();
+  renderList();
+  if (current) select(current, false);
+}
+
+function renderList() {
+  const q = $('#q').value.toLowerCase();
+  if (!data.exists) {
+    $('#list').innerHTML = `<div class="empty">Projektordner <code>${esc(data.base)}</code> existiert nicht.<br><br><button class="btn" onclick="zentrale.open('einstellungen')">Einstellungen öffnen</button></div>`;
+    return;
+  }
+  const items = data.items.filter(p => p.name.toLowerCase().includes(q));
+  $('#list').innerHTML = items.map(p => `
+    <div class="item ${p.name === current ? 'active' : ''}" data-name="${esc(p.name)}">
+      <div class="row"><b>${esc(p.name)}</b><span class="grow"></span>
+        ${p.git ? `<span class="badge ${p.git.changes ? 'warn' : 'ok'}">${esc(p.git.branch)}</span>` : '<span class="badge">kein Git</span>'}</div>
+      <div class="muted small" style="margin-top:4px">${p.type.map(t => `<span class="badge">${t}</span>`).join(' ')} ${p.mtime ? ago(p.mtime) : ''}</div>
+    </div>`).join('') || `<div class="empty">Keine Projekte gefunden in <code>${esc(data.base)}</code>.</div>`;
+}
+
+function select(name, scroll = true) {
+  const p = data.items.find(x => x.name === name);
+  if (!p) return;
+  current = name;
+  document.body.classList.add('show-detail');
+  renderList();
+  const g = p.git;
+  const scripts = Object.keys(p.scripts || {});
+  $('#detail').innerHTML = `<div class="page">
+    <div class="row"><button class="btn sm" id="back" style="display:none">←</button><h2 style="margin:0">▣ ${esc(p.name)}</h2></div>
+    <p class="muted mono small">${esc(data.base)}/${esc(p.name)}</p>
+    <div class="actions">
+      <button class="btn" data-act="terminal">⌨ Terminal hier</button>
+      <button class="btn" data-act="files">❐ Dateien</button>
+      <button class="btn primary" data-act="agent">✦ KI-Agent</button>
+      <button class="btn" data-act="notes">✎ Notizen</button>
+    </div>
+
+    <h2>Git</h2>
+    ${g ? `<div class="card kv">
+      <span>Branch</span><span class="mono">${esc(g.branch)} ${g.tracking ? `<span class="muted">[${esc(g.tracking)}]</span>` : ''}</span>
+      <span>Änderungen</span><span>${g.changes ? `<span class="badge warn">${g.changes} Datei(en)</span>` : '<span class="badge ok">sauber</span>'}</span>
+      <span>Letzter Commit</span><span>${g.last ? `<span class="mono">${esc(g.last.hash)}</span> ${esc(g.last.subject)} <span class="muted">· ${esc(g.last.when)}</span>` : '—'}</span>
+      <span>Remote</span><span class="mono small">${g.remote ? (/^https?:/.test(g.remote) ? `<a href="${esc(g.remote.replace(/\.git$/, ''))}" target="_blank" rel="noopener">${esc(g.remote)}</a>` : esc(g.remote)) : '—'}</span>
+    </div>
+    <div class="actions" style="margin-top:10px">
+      <button class="btn" data-run="git status">status</button>
+      <button class="btn" data-run="git fetch --all --prune">fetch</button>
+      <button class="btn" data-run="git pull --ff-only">pull</button>
+      <button class="btn" data-run="git push">push</button>
+      <button class="btn" data-run="git log --oneline -20">log</button>
+    </div>` : `<div class="card">Kein Git-Repository. <button class="btn sm" data-run="git init">git init</button></div>`}
+
+    ${scripts.length ? `<h2>Skripte (package.json)</h2><div class="actions">${scripts.map(s => `<button class="btn" data-run="npm run ${esc(s)}" title="${esc(p.scripts[s])}">▶ ${esc(s)}</button>`).join('')}</div>` : ''}
+    ${p.type.includes('node') ? `<div class="actions" style="margin-top:8px"><button class="btn" data-run="npm install">npm install</button></div>` : ''}
+    ${p.type.includes('docker') ? `<h2>Docker</h2><div class="actions"><button class="btn" data-run="docker compose up -d --build">▶ compose up</button><button class="btn" data-run="docker compose down">■ compose down</button><button class="btn" data-run="docker compose logs --tail 200">logs</button></div>` : ''}
+
+    <h2>Eigener Befehl</h2>
+    <form class="row" id="cmdForm"><input class="input grow mono" id="cmd" placeholder="z. B. python main.py"><button class="btn">▶ Starten</button></form>
+  </div>`;
+  if (matchMedia('(max-width: 720px)').matches) { $('#back').style.display = ''; $('#back').onclick = () => document.body.classList.remove('show-detail'); }
+  $('#cmdForm').onsubmit = (e) => { e.preventDefault(); const c = $('#cmd').value.trim(); if (c) run(c); };
+  if (scroll) $('#detail').scrollTop = 0;
+}
+
+async function run(cmd) {
+  try {
+    const pr = await zentrale.run.start({ name: `${current}: ${cmd}`, cmd, project: current });
+    zentrale.open('prozesse', { id: pr.id });
+  } catch (e) { zentrale.notify(e.message, 'err'); }
+}
+
+$('#detail').onclick = (e) => {
+  const r = e.target.closest('[data-run]'); if (r) return run(r.dataset.run);
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const act = a.dataset.act;
+  if (act === 'terminal') zentrale.open('terminal', { project: current });
+  if (act === 'files') zentrale.open('dateien', { path: current });
+  if (act === 'agent') zentrale.open('ki-chat', { project: current, mode: 'edit' });
+  if (act === 'notes') zentrale.open('notizen', { project: current });
+};
+$('#list').onclick = (e) => { const i = e.target.closest('[data-name]'); if (i) select(i.dataset.name); };
+$('#q').oninput = renderList;
+$('#reload').onclick = load;
+$('#newBtn').onclick = () => { $('#newForm').reset(); $('#dlg').showModal(); };
+$('#dlg').onclose = async () => {
+  if ($('#dlg').returnValue !== 'ok') return;
+  const f = new FormData($('#newForm'));
+  try {
+    const r = await zentrale.projects.create(f.get('name'), f.get('clone') || undefined);
+    if (r.id) { zentrale.open('prozesse', { id: r.id }); zentrale.events.on('proc.exit', (p) => { if (p.id === r.id) load(); }); }
+    else { current = f.get('name'); await load(); zentrale.notify(`Projekt ${current} angelegt`, 'ok'); }
+  } catch (e) { zentrale.notify(e.message, 'err'); }
+};
+zentrale.onParams((p) => { if (p.project) { current = p.project; load(); } });
+zentrale.events.on('fs.changed', () => {});
+load();
+</script>
+</body></html>

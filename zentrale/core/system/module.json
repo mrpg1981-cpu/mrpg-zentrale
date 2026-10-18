@@ -1,0 +1,1 @@
+{ "name": "System", "icon": "◫", "order": 20, "group": "System", "description": "CPU, RAM, Speicher, Docker-Container und Event-Bus." }

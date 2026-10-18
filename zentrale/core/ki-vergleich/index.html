@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KI-Vergleich</title><link rel="stylesheet" href="/theme.css">
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; }
+  form { padding: 10px; border-bottom: 1px solid var(--line); background: var(--bg-deep); display: grid; gap: 8px; }
+  #q { resize: vertical; min-height: 60px; }
+  #cols { flex: 1; min-height: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(300px, 1fr); gap: 1px; background: var(--line); overflow-x: auto; }
+  .col { background: var(--bg); display: flex; flex-direction: column; min-height: 0; }
+  .col .head { padding: 8px 12px; background: var(--bg-deep); border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; font-family: var(--mono); }
+  .col .body { flex: 1; overflow: auto; padding: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+  .col.err .body { color: var(--red); }
+  label.chk { display: inline-flex; gap: 5px; align-items: center; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; }
+  label.chk:has(input:checked) { border-color: var(--cyan); color: var(--cyan); }
+  label.chk.off { opacity: .45; cursor: default; }
+</style></head>
+<body>
+<form id="f">
+  <textarea class="input" id="q" placeholder="Eine Frage an mehrere Modelle gleichzeitig … (Strg+Enter)"></textarea>
+  <div class="row"><div class="row" id="provs"></div><span class="grow"></span><button class="btn primary" id="go">⇶ Vergleichen</button></div>
+</form>
+<div id="cols"><div class="empty" style="background:var(--bg)">Modelle wählen und Frage stellen.</div></div>
+<script src="/zentrale-sdk.js"></script>
+<script src="/md.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc } = zentrale.util;
+let running = [];
+
+async function go() {
+  if (running.length) { running.forEach(c => c.abort()); return; }
+  const prompt = $('#q').value.trim();
+  const ids = [...document.querySelectorAll('#provs input:checked')].map(i => i.value);
+  if (!prompt || !ids.length) return;
+  $('#cols').innerHTML = '';
+  $('#go').textContent = '■ Stopp';
+  await Promise.allSettled(ids.map(async (id) => {
+    const col = document.createElement('div'); col.className = 'col';
+    col.innerHTML = `<div class="head"><span class="dot warn"></span><b>${esc(id)}</b><span class="grow"></span><span class="muted small t"></span></div><div class="body md">…</div>`;
+    $('#cols').appendChild(col);
+    const ctrl = new AbortController(); running.push(ctrl);
+    try {
+      const r = await zentrale.ki.ask({ provider: id, prompt, signal: ctrl.signal, onChunk: (_, all) => { col.querySelector('.body').innerHTML = renderMarkdown(all); } });
+      col.querySelector('.dot').className = 'dot ' + (r.text ? 'ok' : 'err');
+      col.querySelector('.t').textContent = `${(r.seconds || 0).toFixed(1)} s`;
+      if (!r.text) { col.classList.add('err'); col.querySelector('.body').textContent = r.error || 'Keine Antwort'; }
+    } catch (e) {
+      col.classList.add('err'); col.querySelector('.dot').className = 'dot err';
+      col.querySelector('.body').textContent = e.name === 'AbortError' ? 'abgebrochen' : e.message;
+    }
+  }));
+  running = []; $('#go').textContent = '⇶ Vergleichen';
+  zentrale.notify('Vergleich fertig', 'ok');
+}
+
+$('#f').onsubmit = (e) => { e.preventDefault(); go(); };
+$('#q').onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); go(); } };
+zentrale.ki.status().then(st => {
+  $('#provs').innerHTML = st.map(p => {
+    const ok = p.installed && p.loggedIn !== false;
+    return `<label class="chk ${ok ? '' : 'off'}" title="${ok ? '' : 'nicht verfügbar'}"><input type="checkbox" value="${p.id}" ${ok ? 'checked' : 'disabled'}>${esc(p.name)}</label>`;
+  }).join('');
+});
+zentrale.onParams((p) => { if (p.prompt) $('#q').value = p.prompt; });
+</script>
+</body></html>

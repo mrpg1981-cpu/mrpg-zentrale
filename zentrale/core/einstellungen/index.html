@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Einstellungen</title><link rel="stylesheet" href="/theme.css">
+<style>
+  .page { max-width: 760px; }
+  .sec { margin-bottom: 18px; }
+  .sw { display: flex; gap: 6px; flex-wrap: wrap; }
+  .sw button { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; }
+  .sw button.sel { border-color: var(--text); }
+  pre.out { max-height: 200px; }
+</style></head>
+<body><div class="page">
+<h2>⚙ Einstellungen</h2>
+
+<form class="card sec" id="gen">
+  <label class="field"><span>Projektordner (alle Projekte liegen hier; im Docker: <code>/projekte</code>)</span><input class="input mono" name="projectsDir"></label>
+  <div class="row">
+    <label class="field grow"><span>Standard-KI</span><select class="input" name="defaultProvider"></select></label>
+    <label class="field grow"><span>Standard-Modell (optional)</span><input class="input mono" name="defaultModel" placeholder="z. B. sonnet, opus"></label>
+  </div>
+  <label class="field"><span>Shell für Terminals (leer = System-Standard)</span><input class="input mono" name="shell" placeholder="/bin/bash, /usr/bin/fish, powershell.exe"></label>
+  <label class="row" style="margin-bottom:14px"><input type="checkbox" name="notifications"> Desktop-Benachrichtigungen, wenn die Zentrale im Hintergrund ist</label>
+  <div class="row"><span class="grow"></span><button class="btn primary">Speichern</button></div>
+</form>
+
+<h2>Design</h2>
+<div class="card sec">
+  <label class="field"><span>Modus</span>
+    <select class="input" id="theme"><option value="dark">Dunkel (MrPG.dev)</option><option value="light">Hell</option></select></label>
+  <div class="field"><span class="muted small">Akzentfarbe</span><div class="sw" id="sw"></div></div>
+</div>
+
+<h2>Passwort ändern</h2>
+<form class="card sec" id="pw">
+  <div class="row">
+    <input class="input grow" type="password" name="old" placeholder="Aktuelles Passwort" autocomplete="current-password" required>
+    <input class="input grow" type="password" name="new" placeholder="Neues Passwort" autocomplete="new-password" required minlength="4">
+    <button class="btn">Ändern</button>
+  </div>
+  <div class="muted small" style="margin-top:8px">Passwort vergessen? Auf dem Server <code>node server.js reset-password</code> ausführen.</div>
+</form>
+
+<h2>Backup</h2>
+<div class="card sec">
+  <p class="muted" style="margin-top:0">Sichert Einstellungen, Chats, Notizen, Prompts und Nutzung (<code>data/</code>).</p>
+  <div class="row">
+    <a class="btn primary" href="/api/backup" download>⬇ Backup herunterladen</a>
+    <a class="btn" href="/api/backup?auth=1" download title="Enthält deine KI-Logins – sicher aufbewahren!">⬇ inkl. KI-Logins</a>
+    <span class="grow"></span>
+    <label class="btn">⬆ Wiederherstellen<input type="file" id="restore" accept=".gz,.tgz" hidden></label>
+  </div>
+</div>
+
+<h2>Update</h2>
+<div class="card sec">
+  <div class="row"><span id="upd" class="grow muted">Prüfe …</span><button class="btn" id="check">Prüfen</button><button class="btn primary" id="pull" disabled>Aktualisieren</button></div>
+  <pre class="log out" id="updOut" hidden></pre>
+</div>
+
+<h2>Über</h2>
+<div class="card sec small" id="about"></div>
+</div>
+<script src="/zentrale-sdk.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc } = zentrale.util;
+const ACCENTS = ['#67f5ff', '#7c9cff', '#b98cff', '#ff7ab6', '#ff9f5a', '#f5d76e', '#3fb950', '#2dd4bf'];
+let settings = {};
+
+async function load() {
+  const [s, st, info] = await Promise.all([zentrale.settings.get(), zentrale.ki.status(), zentrale.info()]);
+  settings = s;
+  const f = $('#gen');
+  f.defaultProvider.innerHTML = st.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  for (const k of ['projectsDir', 'defaultProvider', 'defaultModel', 'shell']) f[k].value = s[k] || '';
+  f.notifications.checked = !!s.notifications;
+  $('#theme').value = s.theme;
+  renderSwatches();
+  $('#about').innerHTML = `〄 <b>MRPG Zentrale</b> v${esc(info.version)}<br><span class="muted">Daten: <code>${esc(info.data)}</code> · ${info.docker ? 'läuft in Docker' : esc(info.platform)} · Terminal ${info.pty ? 'voll' : 'einfach'}</span>`;
+}
+
+function renderSwatches() {
+  $('#sw').innerHTML = ACCENTS.map(c => `<button style="background:${c}" class="${(settings.accent || '').toLowerCase() === c ? 'sel' : ''}" data-c="${c}" title="${c}"></button>`).join('') +
+    `<input type="color" id="custom" value="${esc(settings.accent || '#67f5ff')}" title="Eigene Farbe">`;
+  $('#custom').onchange = (e) => setDesign({ accent: e.target.value });
+}
+async function setDesign(patch) { settings = await zentrale.settings.set(patch); renderSwatches(); }
+$('#sw').onclick = (e) => { const b = e.target.closest('[data-c]'); if (b) setDesign({ accent: b.dataset.c }); };
+$('#theme').onchange = () => setDesign({ theme: $('#theme').value });
+
+$('#gen').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  try {
+    settings = await zentrale.settings.set({ projectsDir: f.projectsDir.value.trim(), defaultProvider: f.defaultProvider.value, defaultModel: f.defaultModel.value.trim(), shell: f.shell.value.trim(), notifications: f.notifications.checked });
+    if (settings.notifications && 'Notification' in window) Notification.requestPermission();
+    zentrale.notify('Einstellungen gespeichert', 'ok');
+  } catch (err) { zentrale.notify(err.message, 'err'); }
+};
+
+$('#pw').onsubmit = async (e) => {
+  e.preventDefault();
+  try { await zentrale.api('POST', '/api/auth/change', { old: e.target.old.value, new: e.target.new.value }); e.target.reset(); zentrale.notify('Passwort geändert', 'ok'); }
+  catch (err) { zentrale.notify(err.message, 'err'); }
+};
+
+$('#restore').onchange = async (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  if (!confirm(`Backup „${file.name}“ einspielen? Vorhandene Daten werden überschrieben.`)) return;
+  try { await zentrale.api('POST', '/api/restore', file, true); zentrale.notify('Backup eingespielt – Seite wird neu geladen', 'ok'); setTimeout(() => top.location.reload(), 1200); }
+  catch (err) { zentrale.notify(err.message, 'err'); }
+  e.target.value = '';
+};
+
+async function check() {
+  $('#upd').textContent = 'Prüfe …';
+  try {
+    const u = await zentrale.api('GET', '/api/update');
+    if (!u.git) { $('#upd').textContent = 'Kein Git-Checkout – Update manuell (neue Version herunterladen).'; return; }
+    $('#upd').innerHTML = `${esc(u.current)}<br><span class="small">${esc(u.status)}</span>`;
+    $('#pull').disabled = !u.behind;
+    if (u.behind) $('#upd').innerHTML += `<br><span class="badge accent">${u.behind} neue Commits verfügbar</span>`;
+  } catch (err) { $('#upd').textContent = err.message; }
+}
+$('#check').onclick = check;
+$('#pull').onclick = async () => {
+  const r = await zentrale.api('POST', '/api/update');
+  $('#updOut').hidden = false; $('#updOut').textContent = r.output;
+  zentrale.notify(r.ok ? 'Aktualisiert – bitte Zentrale neu starten' : 'Update fehlgeschlagen', r.ok ? 'ok' : 'err');
+  check();
+};
+
+load(); check();
+</script>
+</body></html>

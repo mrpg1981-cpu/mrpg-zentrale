@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>System</title><link rel="stylesheet" href="/theme.css">
+<style>
+  .stat b { font: bold 22px var(--mono); color: var(--cyan); display: block; margin: 4px 0 8px; }
+  .spark { display: flex; align-items: flex-end; gap: 2px; height: 36px; margin-top: 8px; }
+  .spark i { flex: 1; background: var(--cyan); opacity: .6; min-height: 1px; }
+  #ev { height: 260px; }
+</style></head>
+<body><div class="page">
+<h2>◫ System</h2>
+<div class="grid" id="stats"></div>
+
+<h2>Speicher</h2>
+<table class="list card" style="padding:0" id="disks"></table>
+
+<h2>Docker-Container</h2>
+<div id="docker"></div>
+
+<h2>Zentrale</h2>
+<div class="card mono small" id="info"></div>
+
+<h2>Event-Bus <button class="btn sm" id="ping" style="margin-left:8px">Test-Event</button></h2>
+<div class="log card" id="ev"></div>
+</div>
+<script src="/zentrale-sdk.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc, bytes } = zentrale.util;
+const hist = { cpu: [], mem: [] };
+const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+const cls = (p) => (p > 90 ? 'err' : p > 75 ? 'warn' : '');
+const spark = (arr) => `<div class="spark">${arr.map(v => `<i style="height:${Math.max(2, v * .36)}px"></i>`).join('')}</div>`;
+
+async function refresh() {
+  const s = await zentrale.system();
+  const mem = pct(s.memTotal - s.memFree, s.memTotal);
+  hist.cpu.push(s.cpu); hist.mem.push(mem);
+  for (const k in hist) if (hist[k].length > 40) hist[k].shift();
+  const up = `${Math.floor(s.uptime / 86400)} T ${Math.floor((s.uptime % 86400) / 3600)} Std ${Math.floor((s.uptime % 3600) / 60)} Min`;
+  $('#stats').innerHTML = `
+    <div class="card stat"><span class="muted">CPU · ${s.cpus} Kerne</span><b>${s.cpu}%</b><div class="bar ${cls(s.cpu)}"><i style="width:${s.cpu}%"></i></div>${spark(hist.cpu)}</div>
+    <div class="card stat"><span class="muted">RAM</span><b>${mem}%</b><div class="bar ${cls(mem)}"><i style="width:${mem}%"></i></div>${spark(hist.mem)}<div class="muted small">${bytes(s.memTotal - s.memFree)} / ${bytes(s.memTotal)}</div></div>
+    <div class="card stat"><span class="muted">Last (1/5/15 Min)</span><b>${s.load.map(l => l.toFixed(2)).join(' ')}</b><div class="muted small">${esc(s.cpuModel || '')}</div></div>
+    <div class="card stat"><span class="muted">${esc(s.host)}</span><b>${up}</b><div class="muted small">${esc(s.platform)} ${esc(s.release)} · ${esc(s.arch)}${s.inDocker ? ' · Docker' : ''}</div></div>`;
+  $('#disks').innerHTML = '<tr><th>Mount</th><th>Gerät</th><th style="width:40%">Belegt</th><th>Frei</th></tr>' + s.disks.map(d => {
+    const p = pct(d.used, d.size);
+    return `<tr><td class="mono">${esc(d.mount)}</td><td class="muted small mono">${esc(d.fs)}</td><td><div class="bar ${cls(p)}"><i style="width:${p}%"></i></div><span class="small muted">${p}% · ${bytes(d.used)} / ${bytes(d.size)}</span></td><td>${bytes(d.size - d.used)}</td></tr>`;
+  }).join('');
+  $('#docker').innerHTML = s.docker === null
+    ? '<div class="muted">Docker nicht erreichbar. Im Container: Docker-Socket in <code>docker-compose.yml</code> einbinden (siehe Kommentar).</div>'
+    : s.docker.length ? `<table class="list card" style="padding:0"><tr><th></th><th>Name</th><th>Image</th><th>Status</th><th>Ports</th></tr>${s.docker.map(c => `<tr><td><span class="dot ${c.state === 'running' ? 'ok' : 'err'}"></span></td><td class="mono">${esc(c.name)}</td><td class="muted small">${esc(c.image)}</td><td class="small">${esc(c.status)}</td><td class="muted small mono">${esc(c.ports)}</td></tr>`).join('')}</table>`
+    : '<div class="muted">Keine Container.</div>';
+}
+
+zentrale.info().then(i => $('#info').innerHTML = `Version ${esc(i.version)} · ${i.docker ? 'Docker' : esc(i.platform)} · Terminal: ${i.pty ? 'voll (pty)' : 'einfach'}<br>Daten: ${esc(i.data)}<br>Projekte: ${esc(i.projectsDir)}`);
+zentrale.events.on('*', (_, m) => {
+  const line = document.createElement('div');
+  line.textContent = `${new Date(m.ts).toLocaleTimeString()}  ${m.from} → ${m.type}  ${JSON.stringify(m.payload ?? '')}`.slice(0, 400);
+  $('#ev').appendChild(line);
+  while ($('#ev').childElementCount > 300) $('#ev').firstChild.remove();
+  $('#ev').scrollTop = 1e9;
+});
+$('#ping').onclick = () => zentrale.events.emit('ping', { hallo: 'Zentrale' });
+refresh();
+setInterval(() => { if (!document.hidden && window.frameElement?.classList.contains('active') !== false) refresh(); }, 3000);
+</script>
+</body></html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anmelden · MRPG Zentrale</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+  .box { width: min(360px, 100%); }
+  .brand { color: var(--cyan); font: bold 22px var(--mono); margin-bottom: 4px; }
+  form { display: grid; gap: 10px; margin-top: 18px; }
+  .err { color: var(--red); min-height: 1.2em; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="card box">
+  <div class="brand">〄 MRPG Zentrale</div>
+  <div class="muted" id="sub">Anmelden</div>
+  <form id="f">
+    <input class="input" type="password" id="pw" placeholder="Passwort" autocomplete="current-password" autofocus required>
+    <input class="input" type="password" id="pw2" placeholder="Passwort wiederholen" autocomplete="new-password" hidden>
+    <div class="err" id="err"></div>
+    <button class="btn primary" id="go">Anmelden</button>
+  </form>
+</div>
+<script>
+const $ = (s) => document.querySelector(s);
+let setup = false;
+fetch('/api/auth/state').then(r => r.json()).then(s => {
+  if (s.authed) return location.replace('/');
+  setup = !s.setup;
+  if (setup) {
+    $('#sub').textContent = 'Erster Start – lege ein Passwort für deine Zentrale fest.';
+    $('#pw').autocomplete = 'new-password';
+    $('#pw2').hidden = false; $('#pw2').required = true;
+    $('#go').textContent = 'Passwort festlegen';
+  }
+});
+$('#f').onsubmit = async (e) => {
+  e.preventDefault();
+  $('#err').textContent = '';
+  if (setup && $('#pw').value !== $('#pw2').value) return ($('#err').textContent = 'Passwörter stimmen nicht überein');
+  const r = await fetch(setup ? '/api/auth/setup' : '/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: $('#pw').value }),
+  });
+  if (r.ok) location.replace('/');
+  else { $('#err').textContent = (await r.json()).error; $('#pw').select(); }
+};
+</script>
+</body>
+</html>

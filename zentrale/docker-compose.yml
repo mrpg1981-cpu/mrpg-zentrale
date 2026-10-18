@@ -1,14 +1,20 @@
 services:
   zentrale:
     build: .
+    image: mrpg-zentrale
     container_name: mrpg-zentrale
     restart: unless-stopped
+    user: "${UID:-1000}:${GID:-1000}"   # gleiche Rechte wie dein CachyOS-Benutzer
     ports:
-      - "127.0.0.1:7777:7777"   # nur lokal; für Zugriff im LAN "7777:7777"
+      - "127.0.0.1:7777:7777"           # nur lokal; fürs LAN: "7777:7777" (Passwort ist Pflicht)
+    environment:
+      - HOME=/data/home
+      # - ZENTRALE_PASSWORD=startpasswort   # optional: Passwort beim ersten Start vorgeben
+      # - OLLAMA_HOST=http://host.docker.internal:11434
     volumes:
-      - ./data:/data            # Logins, Verlauf, Einstellungen
-      - ./modules:/app/modules  # Module ohne Neubau ändern
+      - ./data:/data                    # Logins, Chats, Notizen, Einstellungen
+      - ./modules:/app/modules          # eigene Module ohne Neubau
       - ${PROJEKTE:-~/Projekte}:/projekte
-    # Optional: Ollama auf dem Host nutzen
+      # Docker-Container im System-Modul anzeigen / steuern (gibt der Zentrale volle Docker-Rechte!):
+      # - /var/run/docker.sock:/var/run/docker.sock
     # extra_hosts: ["host.docker.internal:host-gateway"]
-    # environment: [OLLAMA_HOST=http://host.docker.internal:11434]

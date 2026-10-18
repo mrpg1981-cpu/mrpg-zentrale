@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Terminal</title>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; }
+  .ttabs { display: flex; gap: 2px; align-items: center; overflow-x: auto; }
+  .ttab { padding: 5px 10px; border-radius: var(--radius); cursor: pointer; font: 12px var(--mono); color: var(--muted); white-space: nowrap; display: flex; gap: 6px; }
+  .ttab.active { background: var(--cyan-soft); color: var(--cyan); }
+  .ttab .x { opacity: .5; } .ttab .x:hover { opacity: 1; color: var(--red); }
+  .ttab.dead { text-decoration: line-through; }
+  #wrap { flex: 1; min-height: 0; background: var(--bg-term); padding: 6px 0 0 8px; position: relative; }
+  .term { position: absolute; inset: 6px 0 0 8px; display: none; }
+  .term.active { display: block; }
+</style></head>
+<body>
+<div class="toolbar">
+  <div class="ttabs" id="tabs"></div>
+  <span class="grow"></span>
+  <select class="input" id="proj" title="Ordner für neues Terminal"><option value="">Projektordner</option></select>
+  <button class="btn primary" id="new">＋ Terminal</button>
+</div>
+<div id="wrap"><div class="empty" id="empty">Kein Terminal offen.</div></div>
+
+<script src="/vendor/xterm/lib/xterm.js"></script>
+<script src="/vendor/xterm-fit/lib/addon-fit.js"></script>
+<script src="/zentrale-sdk.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc } = zentrale.util;
+const terms = new Map(); // id -> { term, fit, ws, el, tab, info }
+let active = null;
+
+function themeColors() {
+  const cs = getComputedStyle(document.documentElement);
+  return { background: cs.getPropertyValue('--bg-term').trim(), foreground: '#d6dde6', cursor: cs.getPropertyValue('--cyan').trim(), selectionBackground: '#67f5ff44' };
+}
+
+function renderTabs() {
+  $('#tabs').innerHTML = [...terms.values()].map(t =>
+    `<div class="ttab ${t.info.id === active ? 'active' : ''} ${t.info.exited !== null ? 'dead' : ''}" data-id="${t.info.id}">⌨ ${esc(t.info.title)}<span class="x" data-kill="${t.info.id}">✕</span></div>`).join('');
+  $('#empty').style.display = terms.size ? 'none' : '';
+}
+
+function show(id) {
+  active = id;
+  for (const [tid, t] of terms) t.el.classList.toggle('active', tid === id);
+  renderTabs();
+  const t = terms.get(id);
+  if (t) setTimeout(() => { t.fit.fit(); t.term.focus(); }, 0);
+}
+
+function attach(info) {
+  if (terms.has(info.id)) return show(info.id);
+  const el = document.createElement('div'); el.className = 'term'; $('#wrap').appendChild(el);
+  const term = new Terminal({ fontFamily: 'Consolas, "JetBrains Mono", monospace', fontSize: 13, cursorBlink: true, theme: themeColors(), scrollback: 5000, allowProposedApi: true });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(el);
+  const t = { term, fit, el, info, ws: null };
+  terms.set(info.id, t);
+
+  const connect = () => {
+    const ws = new WebSocket(zentrale.terminal.socketUrl(info.id));
+    t.ws = ws;
+    ws.onopen = () => { term.reset(); ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows })); };
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.type === 'data') term.write(m.data);
+      if (m.type === 'exit') { info.exited = m.code; renderTabs(); }
+      if (m.type === 'error') { term.write('\r\n\x1b[31m' + m.data + '\x1b[0m\r\n'); }
+    };
+    ws.onclose = () => { if (terms.has(info.id) && info.exited === null) setTimeout(connect, 1500); };
+  };
+  connect();
+  term.onData((d) => t.ws && t.ws.readyState === 1 && t.ws.send(JSON.stringify({ type: 'input', data: d })));
+  term.onResize(({ cols, rows }) => t.ws && t.ws.readyState === 1 && t.ws.send(JSON.stringify({ type: 'resize', cols, rows })));
+  show(info.id);
+}
+
+async function create(opts = {}) {
+  const info = await zentrale.terminal.create(opts);
+  attach(info);
+}
+
+async function kill(id) {
+  const t = terms.get(id);
+  terms.delete(id);
+  if (t) { t.ws && t.ws.close(); t.term.dispose(); t.el.remove(); }
+  await zentrale.terminal.kill(id).catch(() => {});
+  show(terms.size ? [...terms.keys()].pop() : null);
+}
+
+$('#tabs').onclick = (e) => {
+  const k = e.target.closest('[data-kill]'); if (k) { e.stopPropagation(); return kill(k.dataset.kill); }
+  const t = e.target.closest('[data-id]'); if (t) show(t.dataset.id);
+};
+$('#new').onclick = () => create({ project: $('#proj').value || undefined, title: $('#proj').value || undefined });
+new ResizeObserver(() => { const t = terms.get(active); if (t) t.fit.fit(); }).observe($('#wrap'));
+
+zentrale.onParams((p) => {
+  if (p.terminal) return zentrale.terminal.list().then(l => { const i = l.find(x => x.id === p.terminal); if (i) attach(i); });
+  if (p.project !== undefined || p.input) create({ project: p.project, title: p.project || undefined, input: p.input });
+});
+
+(async () => {
+  const [list, projects] = await Promise.all([zentrale.terminal.list(), zentrale.projects.list().catch(() => ({ items: [] }))]);
+  $('#proj').innerHTML += projects.items.map(p => `<option>${esc(p.name)}</option>`).join('');
+  list.forEach(attach);
+  renderTabs();
+})();
+</script>
+</body></html>

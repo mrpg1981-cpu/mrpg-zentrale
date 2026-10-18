@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prompts</title><link rel="stylesheet" href="/theme.css">
+<style>
+  body { height: 100vh; display: grid; grid-template-columns: minmax(220px, 300px) 1fr; }
+  .side { border-right: 1px solid var(--line); background: var(--bg-deep); display: flex; flex-direction: column; min-height: 0; }
+  #list { flex: 1; overflow: auto; padding: 6px; }
+  .it { padding: 8px 10px; border-radius: var(--radius); cursor: pointer; color: var(--muted); }
+  .it:hover, .it.active { background: var(--cyan-soft); color: var(--cyan); }
+  .it small { display: block; opacity: .7; }
+  .edit { padding: 16px; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: auto; }
+  #text { min-height: 260px; flex: 1; resize: vertical; font-family: var(--mono); }
+  @media (max-width: 700px) { body { grid-template-columns: 1fr; grid-template-rows: 40% 60%; } }
+</style></head>
+<body>
+<div class="side">
+  <div class="toolbar"><input class="input grow" id="q" placeholder="Suchen …"><button class="btn primary" id="add">＋</button></div>
+  <div id="list"></div>
+</div>
+<div class="edit" id="edit">
+  <div class="empty">Vorlage auswählen oder neu anlegen.<br><br>
+  Platzhalter <code>{{eingabe}}</code> wird beim Einfügen im KI-Chat durch deinen bereits getippten Text ersetzt.</div>
+</div>
+<script src="/zentrale-sdk.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc } = zentrale.util;
+let items = [], cur = -1;
+const DEFAULTS = [
+  { title: 'Code erklären', tag: 'Code', text: 'Erkläre mir diesen Code Schritt für Schritt auf Deutsch:\n\n{{eingabe}}' },
+  { title: 'Code-Review', tag: 'Code', text: 'Mach ein gründliches Code-Review. Achte auf Bugs, Sicherheit und Lesbarkeit. Nenne konkrete Verbesserungen:\n\n{{eingabe}}' },
+  { title: 'Fehler finden', tag: 'Code', text: 'Ich bekomme diesen Fehler. Finde die Ursache und schlage einen Fix vor:\n\n{{eingabe}}' },
+  { title: 'Commit-Nachricht', tag: 'Git', text: 'Schreibe eine kurze, präzise Commit-Nachricht (deutsch) für diese Änderungen:\n\n{{eingabe}}' },
+  { title: 'Zusammenfassen', tag: 'Text', text: 'Fasse das Folgende in 5 Stichpunkten zusammen:\n\n{{eingabe}}' },
+];
+const save = () => zentrale.store.set({ items }, 'prompts');
+
+function renderList() {
+  const q = $('#q').value.toLowerCase();
+  $('#list').innerHTML = items.map((p, i) => ({ p, i })).filter(({ p }) => (p.title + p.tag + p.text).toLowerCase().includes(q))
+    .map(({ p, i }) => `<div class="it ${i === cur ? 'active' : ''}" data-i="${i}">${esc(p.title)}<small>${esc(p.tag || '')}</small></div>`).join('') || '<div class="empty">Keine Vorlagen.</div>';
+}
+
+function edit(i) {
+  cur = i; renderList();
+  const p = items[i];
+  $('#edit').innerHTML = `
+    <div class="row"><input class="input grow" id="title" value="${esc(p.title)}" placeholder="Titel"><input class="input" id="tag" value="${esc(p.tag || '')}" placeholder="Kategorie" style="width:140px"></div>
+    <textarea class="input" id="text" placeholder="Prompt-Text … {{eingabe}} als Platzhalter">${esc(p.text)}</textarea>
+    <div class="row"><button class="btn danger" id="del">Löschen</button><span class="grow"></span>
+      <button class="btn" id="cmp">⇶ Im Vergleich nutzen</button><button class="btn" id="use">✦ Im KI-Chat nutzen</button><button class="btn primary" id="save">Speichern</button></div>`;
+  $('#save').onclick = async () => { Object.assign(p, { title: $('#title').value || 'Ohne Titel', tag: $('#tag').value, text: $('#text').value }); await save(); renderList(); zentrale.notify('Vorlage gespeichert', 'ok'); };
+  $('#del').onclick = async () => { if (!confirm('Vorlage löschen?')) return; items.splice(i, 1); cur = -1; await save(); renderList(); $('#edit').innerHTML = '<div class="empty">Gelöscht.</div>'; };
+  $('#use').onclick = () => zentrale.open('ki-chat', { prompt: $('#text').value.replace('{{eingabe}}', '') });
+  $('#cmp').onclick = () => zentrale.open('ki-vergleich', { prompt: $('#text').value.replace('{{eingabe}}', '') });
+}
+
+$('#list').onclick = (e) => { const it = e.target.closest('[data-i]'); if (it) edit(+it.dataset.i); };
+$('#q').oninput = renderList;
+$('#add').onclick = async () => { items.push({ title: 'Neue Vorlage', tag: '', text: '' }); await save(); edit(items.length - 1); };
+zentrale.store.get('prompts').then(async (d) => {
+  if (!d.items) { d.items = DEFAULTS; await zentrale.store.set(d, 'prompts'); }
+  items = d.items; renderList();
+});
+</script>
+</body></html>

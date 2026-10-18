@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prozesse</title><link rel="stylesheet" href="/theme.css">
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; }
+  .split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(240px, 340px) 1fr; }
+  #list { overflow: auto; border-right: 1px solid var(--line); }
+  .item { padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .item:hover, .item.active { background: var(--cyan-soft); }
+  .item .n { font: 13px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .out { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  #log { flex: 1; }
+  @media (max-width: 720px) { .split { grid-template-columns: 1fr; grid-template-rows: 40% 60%; } #list { border-right: 0; border-bottom: 1px solid var(--line); } }
+</style></head>
+<body>
+<form class="toolbar" id="startForm">
+  <select class="input" id="proj"><option value="">Projektordner</option></select>
+  <input class="input grow mono" id="cmd" placeholder="Befehl, z. B. npm run dev">
+  <button class="btn primary">▶ Starten</button>
+</form>
+<div class="split">
+  <div id="list"></div>
+  <div class="out">
+    <div class="toolbar">
+      <b class="mono" id="title">Kein Prozess ausgewählt</b><span id="badge"></span>
+      <span class="grow"></span>
+      <label class="small muted"><input type="checkbox" id="follow" checked> mitscrollen</label>
+      <button class="btn sm" id="restart" disabled>↻ Neu starten</button>
+      <button class="btn sm danger" id="stop" disabled>■ Stopp</button>
+      <button class="btn sm" id="remove" disabled>✕ Entfernen</button>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+<script src="/zentrale-sdk.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc, ago } = zentrale.util;
+let procs = [], current = null, unfollow = null;
+const badge = (s) => `<span class="badge ${s === 'läuft' ? 'ok' : s === 'fehler' ? 'err' : s === 'gestoppt' ? 'warn' : ''}">${s}</span>`;
+
+async function load() {
+  procs = (await zentrale.run.list()).sort((a, b) => b.started - a.started);
+  $('#list').innerHTML = procs.map(p => `
+    <div class="item ${p.id === current ? 'active' : ''}" data-id="${p.id}">
+      <div class="n">${esc(p.name)}</div>
+      <div class="row small muted" style="margin-top:4px">${badge(p.status)} ${ago(p.started)}</div>
+    </div>`).join('') || '<div class="empty">Noch keine Prozesse gestartet.</div>';
+  const p = procs.find(x => x.id === current);
+  if (p) setInfo(p);
+}
+
+function setInfo(p) {
+  $('#title').textContent = p.name;
+  $('#badge').innerHTML = ' ' + badge(p.status);
+  $('#stop').disabled = p.status !== 'läuft';
+  $('#remove').disabled = false;
+  $('#restart').disabled = false;
+}
+
+function select(id) {
+  if (unfollow) unfollow();
+  current = id;
+  $('#log').innerHTML = '';
+  let pending = [];
+  let raf = null;
+  const flush = () => {
+    const frag = document.createDocumentFragment();
+    for (const l of pending) {
+      const d = document.createElement('div');
+      if (l.s === 'err') d.className = 'err';
+      d.textContent = l.line.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+      frag.appendChild(d);
+    }
+    pending = []; raf = null;
+    $('#log').appendChild(frag);
+    while ($('#log').childElementCount > 3000) $('#log').firstChild.remove();
+    if ($('#follow').checked) $('#log').scrollTop = 1e9;
+  };
+  unfollow = zentrale.run.follow(id, {
+    onLine: (l) => { pending.push(l); if (!raf) raf = requestAnimationFrame(flush); },
+    onStatus: (s) => { setInfo(s); load(); },
+  });
+  load();
+}
+
+$('#list').onclick = (e) => { const i = e.target.closest('[data-id]'); if (i) select(i.dataset.id); };
+$('#stop').onclick = () => zentrale.run.stop(current).then(load);
+$('#remove').onclick = async () => { await zentrale.run.remove(current); current = null; if (unfollow) unfollow(); $('#log').innerHTML = ''; $('#title').textContent = 'Kein Prozess ausgewählt'; $('#badge').innerHTML = ''; ['stop', 'remove', 'restart'].forEach(b => $('#' + b).disabled = true); load(); };
+$('#restart').onclick = async () => {
+  const p = procs.find(x => x.id === current); if (!p) return;
+  if (p.status === 'läuft') await zentrale.run.stop(p.id);
+  const base = (await zentrale.projects.list()).base;
+  const project = p.cwd && p.cwd.startsWith(base) ? p.cwd.slice(base.length + 1) : '';
+  const n = await zentrale.run.start({ name: p.name, cmd: p.cmd, project });
+  select(n.id);
+};
+$('#startForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const cmd = $('#cmd').value.trim(); if (!cmd) return;
+  const project = $('#proj').value;
+  try {
+    const p = await zentrale.run.start({ name: project ? `${project}: ${cmd}` : cmd, cmd, project });
+    $('#cmd').value = '';
+    select(p.id);
+  } catch (err) { zentrale.notify(err.message, 'err'); }
+};
+zentrale.events.on('proc.start', load);
+zentrale.events.on('proc.exit', load);
+zentrale.onParams((p) => { if (p.id) select(p.id); });
+zentrale.projects.list().then(r => { $('#proj').innerHTML += r.items.map(p => `<option>${esc(p.name)}</option>`).join(''); }).catch(() => {});
+load();
+</script>
+</body></html>

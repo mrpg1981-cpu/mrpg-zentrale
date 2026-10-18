@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dateien</title><link rel="stylesheet" href="/theme.css">
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; }
+  .split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(220px, 320px) 1fr; }
+  .side { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); background: var(--bg-deep); }
+  .crumbs { padding: 8px 10px; font: 12px var(--mono); border-bottom: 1px solid var(--line); overflow-x: auto; white-space: nowrap; }
+  .crumbs a { cursor: pointer; text-decoration: none; }
+  #entries { flex: 1; overflow: auto; padding: 4px; }
+  .ent { display: flex; gap: 8px; padding: 6px 8px; border-radius: var(--radius); cursor: pointer; font: 13px var(--mono); color: var(--muted); align-items: center; }
+  .ent:hover, .ent.active { background: var(--cyan-soft); color: var(--cyan); }
+  .ent .n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ent .ops { display: none; gap: 4px; }
+  .ent:hover .ops { display: flex; }
+  .ops span { padding: 0 3px; opacity: .7; } .ops span:hover { opacity: 1; }
+  .editor { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  #code { flex: 1; width: 100%; resize: none; border: 0; outline: 0; background: var(--panel-2); color: var(--text); padding: 14px 16px; font: 13px/1.55 var(--mono); tab-size: 2; white-space: pre; }
+  #preview { flex: 1; overflow: auto; display: none; place-items: center; background: var(--bg-term); }
+  #preview img { max-width: 100%; max-height: 100%; }
+  .meta { padding: 5px 10px; font: 11px var(--mono); color: var(--muted); border-top: 1px solid var(--line); display: flex; gap: 14px; }
+  .dirty { color: var(--yellow); }
+  @media (max-width: 720px) { .split { grid-template-columns: 1fr; } .editor { display: none; } body.editing .side { display: none; } body.editing .editor { display: flex; } }
+</style></head>
+<body>
+<div class="split">
+  <div class="side">
+    <div class="toolbar">
+      <button class="btn sm" id="up" title="Eine Ebene hoch">↑</button>
+      <span class="grow"></span>
+      <button class="btn sm" id="newFile">＋ Datei</button>
+      <button class="btn sm" id="newDir">＋ Ordner</button>
+      <button class="btn sm" id="refresh">↻</button>
+    </div>
+    <div class="crumbs" id="crumbs"></div>
+    <div id="entries"></div>
+  </div>
+  <div class="editor">
+    <div class="toolbar">
+      <button class="btn sm" id="back" style="display:none">←</button>
+      <b class="mono" id="fname">Keine Datei geöffnet</b><span class="dirty" id="dirty"></span>
+      <span class="grow"></span>
+      <button class="btn sm" id="askKi" disabled>✦ KI fragen</button>
+      <button class="btn sm primary" id="save" disabled>Speichern <span class="muted">Strg+S</span></button>
+    </div>
+    <textarea id="code" spellcheck="false" disabled placeholder="Datei links auswählen …"></textarea>
+    <div id="preview"></div>
+    <div class="meta"><span id="mInfo"></span><span class="grow"></span><span id="mPos"></span></div>
+  </div>
+</div>
+<script src="/zentrale-sdk.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc, bytes, ago } = zentrale.util;
+let cwd = '', file = null, saved = '', mtime = 0;
+const IMG = /\.(png|jpe?g|gif|webp|svg|ico|bmp)$/i;
+const BIN = /\.(zip|gz|tar|7z|rar|exe|dll|so|bin|pdf|mp3|mp4|wav|ogg|woff2?|ttf|otf|db|sqlite)$/i;
+
+async function list(path = cwd) {
+  try {
+    const entries = await zentrale.fs.list(path);
+    cwd = path;
+    const parts = cwd ? cwd.split('/') : [];
+    $('#crumbs').innerHTML = `<a data-path="">Projekte</a>` + parts.map((p, i) => ` / <a data-path="${esc(parts.slice(0, i + 1).join('/'))}">${esc(p)}</a>`).join('');
+    $('#entries').innerHTML = entries.map(e => `
+      <div class="ent ${file === e.path ? 'active' : ''}" data-path="${esc(e.path)}" data-dir="${e.dir ? 1 : ''}" title="${e.dir ? '' : bytes(e.size) + ' · ' + ago(e.mtime)}">
+        <span>${e.dir ? '▸' : '·'}</span><span class="n">${esc(e.name)}</span>
+        <span class="ops"><span data-op="rename" title="Umbenennen">✎</span><span data-op="delete" title="Löschen">✕</span></span>
+      </div>`).join('') || '<div class="empty">Leerer Ordner</div>';
+  } catch (e) { zentrale.notify(e.message, 'err'); }
+}
+
+async function openFile(path) {
+  if (!confirmDiscard()) return;
+  file = path;
+  $('#fname').textContent = path;
+  document.body.classList.add('editing');
+  $('#askKi').disabled = false;
+  if (IMG.test(path)) {
+    $('#code').style.display = 'none'; $('#preview').style.display = 'grid';
+    $('#preview').innerHTML = `<img src="${zentrale.fs.rawUrl(path)}" alt="">`;
+    $('#save').disabled = true; $('#askKi').disabled = true; saved = $('#code').value = '';
+  } else if (BIN.test(path)) {
+    $('#code').style.display = 'none'; $('#preview').style.display = 'grid';
+    $('#preview').innerHTML = `<div class="empty">Binärdatei – <a href="${zentrale.fs.rawUrl(path)}" download>herunterladen</a></div>`;
+    $('#save').disabled = true; $('#askKi').disabled = true; saved = $('#code').value = '';
+  } else {
+    try {
+      const r = await zentrale.fs.read(path);
+      $('#preview').style.display = 'none'; $('#code').style.display = '';
+      $('#code').disabled = false; $('#save').disabled = false;
+      saved = $('#code').value = r.content; mtime = r.mtime;
+      $('#mInfo').textContent = `${r.content.split('\n').length} Zeilen · ${bytes(new Blob([r.content]).size)}`;
+    } catch (e) { zentrale.notify(e.message, 'err'); }
+  }
+  updateDirty();
+  list(cwd);
+}
+
+function updateDirty() { $('#dirty').textContent = $('#code').value !== saved ? ' ●' : ''; }
+function confirmDiscard() { return $('#code').value === saved || confirm('Ungespeicherte Änderungen verwerfen?'); }
+
+async function save() {
+  if (!file || $('#save').disabled) return;
+  try {
+    await zentrale.fs.write(file, $('#code').value);
+    saved = $('#code').value; updateDirty();
+    zentrale.notify(`Gespeichert: ${file}`, 'ok');
+  } catch (e) { zentrale.notify(e.message, 'err'); }
+}
+
+$('#entries').onclick = async (e) => {
+  const ent = e.target.closest('.ent'); if (!ent) return;
+  const path = ent.dataset.path;
+  const op = e.target.closest('[data-op]');
+  if (op && op.dataset.op === 'delete') {
+    if (!confirm(`„${path}“ wirklich löschen?`)) return;
+    await zentrale.fs.remove(path).catch(err => zentrale.notify(err.message, 'err'));
+    if (file && (file === path || file.startsWith(path + '/'))) { file = null; saved = $('#code').value = ''; $('#fname').textContent = 'Keine Datei geöffnet'; }
+    return list();
+  }
+  if (op && op.dataset.op === 'rename') {
+    const to = prompt('Neuer Name / Pfad:', path); if (!to || to === path) return;
+    await zentrale.fs.rename(path, to).catch(err => zentrale.notify(err.message, 'err'));
+    if (file === path) { file = to; $('#fname').textContent = to; }
+    return list();
+  }
+  ent.dataset.dir ? list(path) : openFile(path);
+};
+$('#crumbs').onclick = (e) => { const a = e.target.closest('[data-path]'); if (a) list(a.dataset.path); };
+$('#up').onclick = () => list(cwd.split('/').slice(0, -1).join('/'));
+$('#refresh').onclick = () => list();
+$('#newFile').onclick = async () => {
+  const n = prompt('Dateiname:'); if (!n) return;
+  const p = (cwd ? cwd + '/' : '') + n;
+  await zentrale.fs.write(p, '').catch(err => zentrale.notify(err.message, 'err'));
+  await list(); openFile(p);
+};
+$('#newDir').onclick = async () => {
+  const n = prompt('Ordnername:'); if (!n) return;
+  await zentrale.fs.mkdir((cwd ? cwd + '/' : '') + n).catch(err => zentrale.notify(err.message, 'err'));
+  list();
+};
+$('#back').onclick = () => document.body.classList.remove('editing');
+if (matchMedia('(max-width: 720px)').matches) $('#back').style.display = '';
+$('#save').onclick = save;
+$('#askKi').onclick = () => {
+  const sel = $('#code').value.substring($('#code').selectionStart, $('#code').selectionEnd);
+  const content = sel || $('#code').value;
+  zentrale.open('ki-chat', { prompt: `Datei: ${file}\n\n\`\`\`\n${content.slice(0, 30000)}\n\`\`\`\n\n` });
+};
+const code = $('#code');
+code.oninput = updateDirty;
+code.onkeyup = code.onclick = () => {
+  const before = code.value.slice(0, code.selectionStart).split('\n');
+  $('#mPos').textContent = `Z ${before.length}, S ${before[before.length - 1].length + 1}`;
+};
+code.onkeydown = (e) => {
+  if (e.key === 'Tab') { e.preventDefault(); document.execCommand('insertText', false, '  '); }
+};
+document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); } });
+window.addEventListener('beforeunload', (e) => { if (code.value !== saved) e.preventDefault(); });
+
+zentrale.onParams(async (p) => {
+  if (p.file) { await list(p.file.split('/').slice(0, -1).join('/')); openFile(p.file); }
+  else if (p.path !== undefined) list(p.path);
+});
+list('');
+</script>
+</body></html>

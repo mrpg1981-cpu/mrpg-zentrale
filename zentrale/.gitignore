@@ -1,6 +1,6 @@
 data/
+node_modules/
 runtime/*
 !runtime/bin/
 runtime/bin/*
 !runtime/bin/.gitkeep
-node_modules/

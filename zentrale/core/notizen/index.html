@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Notizen</title><link rel="stylesheet" href="/theme.css">
+<style>
+  body { height: 100vh; display: grid; grid-template-columns: 220px 1fr; }
+  .side { border-right: 1px solid var(--line); background: var(--bg-deep); overflow: auto; padding: 6px; }
+  .sc { padding: 8px 10px; border-radius: var(--radius); cursor: pointer; color: var(--muted); display: flex; gap: 6px; }
+  .sc:hover, .sc.active { background: var(--cyan-soft); color: var(--cyan); }
+  .sc .n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .grp { padding: 12px 10px 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .main { display: grid; grid-template-columns: 1fr minmax(260px, 380px); min-height: 0; }
+  .notes { display: flex; flex-direction: column; min-height: 0; }
+  #notes { flex: 1; resize: none; border: 0; outline: 0; background: var(--panel-2); color: var(--text); padding: 16px; font: 14px/1.6 var(--sans); }
+  .tasks { border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  #tasks { flex: 1; overflow: auto; padding: 8px; }
+  .task { display: flex; gap: 8px; align-items: flex-start; padding: 7px 8px; border-radius: var(--radius); }
+  .task:hover { background: var(--bg-deep); }
+  .task.done span { text-decoration: line-through; color: var(--muted); }
+  .task span { flex: 1; overflow-wrap: anywhere; }
+  .task .x { opacity: 0; cursor: pointer; } .task:hover .x { opacity: .6; } .task .x:hover { color: var(--red); opacity: 1; }
+  .saved { font-size: 11px; color: var(--muted); }
+  @media (max-width: 760px) { body { grid-template-columns: 1fr; } .side { display: none; } .main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; } .tasks { border-left: 0; border-top: 1px solid var(--line); } }
+</style></head>
+<body>
+<aside class="side" id="side"></aside>
+<div class="main">
+  <div class="notes">
+    <div class="toolbar"><b id="title">Allgemein</b><span class="grow"></span><span class="saved" id="saved"></span></div>
+    <textarea id="notes" placeholder="Notizen … (speichert automatisch)"></textarea>
+  </div>
+  <div class="tasks">
+    <form class="toolbar" id="addTask"><input class="input grow" id="newTask" placeholder="Neue Aufgabe …"><button class="btn primary">＋</button></form>
+    <div id="tasks"></div>
+    <div class="toolbar"><span class="muted small" id="count"></span><span class="grow"></span><button class="btn sm" id="clearDone">Erledigte entfernen</button></div>
+  </div>
+</div>
+<script src="/zentrale-sdk.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc } = zentrale.util;
+let data = {}, scope = '_allgemein', projects = [], timer = null;
+const cur = () => (data[scope] = data[scope] || { notes: '', tasks: [] });
+
+function persist(delay = 600) {
+  clearTimeout(timer);
+  $('#saved').textContent = '…';
+  timer = setTimeout(async () => { await zentrale.store.set(data); $('#saved').textContent = '✓ gespeichert'; }, delay);
+}
+
+function renderSide() {
+  const open = (k) => (data[k] && data[k].tasks || []).filter(t => !t.done).length;
+  const item = (k, label) => `<div class="sc ${k === scope ? 'active' : ''}" data-k="${esc(k)}"><span class="n">${esc(label)}</span>${open(k) ? `<span class="badge">${open(k)}</span>` : ''}</div>`;
+  const withData = projects.filter(p => data[p]);
+  const without = projects.filter(p => !data[p]);
+  $('#side').innerHTML = item('_allgemein', '✎ Allgemein') +
+    (withData.length ? '<div class="grp">Projekte</div>' + withData.map(p => item(p, '▣ ' + p)).join('') : '') +
+    (without.length ? '<div class="grp">Weitere Projekte</div>' + without.map(p => item(p, p)).join('') : '');
+}
+
+function render() {
+  const c = cur();
+  $('#title').textContent = scope === '_allgemein' ? 'Allgemein' : '▣ ' + scope;
+  $('#notes').value = c.notes || '';
+  $('#tasks').innerHTML = c.tasks.map((t, i) => `<label class="task ${t.done ? 'done' : ''}"><input type="checkbox" data-i="${i}" ${t.done ? 'checked' : ''}><span>${esc(t.text)}</span><b class="x" data-del="${i}">✕</b></label>`).join('') || '<div class="empty">Keine Aufgaben.</div>';
+  const open = c.tasks.filter(t => !t.done).length;
+  $('#count').textContent = `${open} offen · ${c.tasks.length - open} erledigt`;
+  renderSide();
+}
+
+$('#side').onclick = (e) => { const s = e.target.closest('[data-k]'); if (s) { scope = s.dataset.k; render(); } };
+$('#notes').oninput = () => { cur().notes = $('#notes').value; persist(); };
+$('#addTask').onsubmit = (e) => {
+  e.preventDefault();
+  const t = $('#newTask').value.trim(); if (!t) return;
+  cur().tasks.push({ text: t, done: false, created: Date.now() });
+  $('#newTask').value = ''; render(); persist(0);
+};
+$('#tasks').onclick = (e) => {
+  const d = e.target.closest('[data-del]');
+  if (d) { e.preventDefault(); cur().tasks.splice(+d.dataset.del, 1); render(); return persist(0); }
+};
+$('#tasks').onchange = (e) => { const i = e.target.dataset.i; if (i !== undefined) { cur().tasks[i].done = e.target.checked; render(); persist(0); } };
+$('#clearDone').onclick = () => { cur().tasks = cur().tasks.filter(t => !t.done); render(); persist(0); };
+
+(async () => {
+  const [d, pr] = await Promise.all([zentrale.store.get(), zentrale.projects.list().catch(() => ({ items: [] }))]);
+  data = d; projects = pr.items.map(p => p.name);
+  render();
+  zentrale.onParams((p) => { if (p.project) { scope = p.project; render(); } });
+})();
+</script>
+</body></html>

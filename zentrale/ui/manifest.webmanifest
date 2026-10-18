@@ -1,0 +1,10 @@
+{
+  "name": "MRPG Zentrale",
+  "short_name": "Zentrale",
+  "description": "Dashboard für alle Projekte, Apps und KI-Modelle",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#2b2f36",
+  "theme_color": "#24272d",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
