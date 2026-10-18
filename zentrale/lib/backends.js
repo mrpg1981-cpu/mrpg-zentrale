@@ -26,7 +26,7 @@ const waitForPort = (port, ms = 20000) => new Promise((resolve, reject) => {
   tryOnce();
 });
 
-module.exports = function createBackends({ modulesDir, procs, runEnv }) {
+module.exports = function createBackends({ modulesDir, dataDir, procs, runEnv }) {
   const running = new Map(); // id -> { port, procId, ready: Promise }
 
   function npmInstall(cwd) {
@@ -41,7 +41,10 @@ module.exports = function createBackends({ modulesDir, procs, runEnv }) {
     const cwd = path.join(modulesDir, mod.id);
     if (fs.existsSync(path.join(cwd, 'package.json')) && !fs.existsSync(path.join(cwd, 'node_modules'))) await npmInstall(cwd);
     const port = await freePort();
-    const env = { ...(mod.backend.env || {}), PORT: String(port), HOST: '127.0.0.1', NO_BROWSER: '1', ZENTRALE: '1' };
+    // MODULE_DATA: eigener Datenordner des Moduls unter data/modules/<id> (Backup inklusive)
+    const moduleData = path.join(dataDir, 'modules', mod.id);
+    fs.mkdirSync(moduleData, { recursive: true });
+    const env = { ...(mod.backend.env || {}), PORT: String(port), HOST: '127.0.0.1', NO_BROWSER: '1', ZENTRALE: '1', MODULE_DATA: moduleData };
     const p = procs.start({ name: `Modul: ${mod.name}`, cmd: mod.backend.cmd, cwd, env, module: mod.id });
     await waitForPort(port);
     return { port, procId: p.id };

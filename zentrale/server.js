@@ -58,7 +58,7 @@ const procs = require('./lib/procs')({ runEnv, emit });
 const terminals = require('./lib/terminal')({ settings, runEnv });
 const library = require('./lib/library')({ root: ROOT, dataDir: DIRS.data });
 const team = require('./lib/team')({ dataDir: DIRS.data, ki, emit, runEnv, library, resolveProject: (rel) => files.resolve(rel) });
-const backends = require('./lib/backends')({ modulesDir: DIRS.modules, procs, runEnv });
+const backends = require('./lib/backends')({ modulesDir: DIRS.modules, dataDir: DIRS.data, procs, runEnv });
 
 // ---------- Module: core/ (eingebaut) und modules/ (deine Apps) ----------
 function scan(dir, core) {

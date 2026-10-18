@@ -1,0 +1,8 @@
+{
+  "name": "Aufräumen",
+  "icon": "♻",
+  "order": 30,
+  "group": "Module",
+  "description": "Durchsucht deine Ordner, findet Dubletten und sortiert alles neu – eigenständig, ohne zu löschen, mit Rückgängig.",
+  "backend": { "cmd": "node server.js" }
+}

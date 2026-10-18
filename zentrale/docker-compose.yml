@@ -15,6 +15,12 @@ services:
       - ./data:/data                    # Logins, Chats, Notizen, Einstellungen
       - ./modules:/app/modules          # eigene Module ohne Neubau
       - ${PROJEKTE:-~/Projekte}:/projekte
+      # Für das Modul „Aufräumen“: die Ordner deines PCs einbinden (gleiche Pfade wie auf dem Host,
+      # dann stimmen die Pfade in Plan und Verlauf mit deinem System überein):
+      # - ${HOME}/Downloads:${HOME}/Downloads
+      # - ${HOME}/Dokumente:${HOME}/Dokumente
+      # - ${HOME}/Bilder:${HOME}/Bilder
+      # - ${HOME}/Sortiert:${HOME}/Sortiert
       # Docker-Container im System-Modul anzeigen / steuern (gibt der Zentrale volle Docker-Rechte!):
       # - /var/run/docker.sock:/var/run/docker.sock
     # extra_hosts: ["host.docker.internal:host-gateway"]

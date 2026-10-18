@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aufräumen</title>
+<style>
+  /* Fallback, falls ohne Zentrale gestartet – sonst kommt das Design aus /theme.css */
+  :root { --bg:#2b2f36; --bg-deep:#24272d; --bg-term:#171a1f; --panel:#383c44; --panel-2:#292d34; --line:#59616d; --text:#f2f5f7; --muted:#b9bec7; --cyan:#67f5ff; --cyan-soft:#67f5ff22; --green:#3fb950; --red:#ff6b6b; --yellow:#f5d76e; --radius:6px; --mono:Consolas,monospace; --on-accent:#111; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px system-ui, sans-serif; }
+</style>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; }
+  .tabs { display: flex; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--line); background: var(--bg-deep); overflow-x: auto; }
+  .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 10px 14px; cursor: pointer; font: inherit; white-space: nowrap; }
+  .tabs button.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+  .tabs .badge { margin-left: 4px; }
+  main { flex: 1; overflow: auto; }
+  .status { padding: 8px 14px; border-bottom: 1px solid var(--line); display: none; gap: 10px; align-items: center; background: var(--panel-2); }
+  .status.on { display: flex; }
+  .status .bar { flex: 1; max-width: 400px; }
+  textarea.input { width: 100%; font-family: var(--mono); font-size: 13px; resize: vertical; }
+  .stat b { font: bold 22px var(--mono); color: var(--cyan); display: block; margin: 4px 0; }
+  .catrow { display: grid; grid-template-columns: 140px 1fr 90px 70px; gap: 10px; align-items: center; padding: 4px 0; }
+  .catrow .bar { height: 10px; }
+  .grp { margin-bottom: 10px; }
+  .grp .f { display: flex; gap: 8px; align-items: center; font: 12.5px var(--mono); padding: 3px 0; cursor: pointer; overflow-wrap: anywhere; }
+  .grp .f.keep { color: var(--green); }
+  .grp .f.dup { color: var(--muted); text-decoration: line-through; }
+  .mv { font: 12px var(--mono); }
+  .mv td { padding: 4px 8px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+  .mv .arrow { color: var(--cyan); }
+  .hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .hero .card { display: flex; flex-direction: column; gap: 8px; }
+  .hero .card p { margin: 0; flex: 1; }
+  .safe { border-left: 3px solid var(--green); padding: 8px 12px; background: #3fb95014; border-radius: var(--radius); margin: 14px 0; font-size: 13px; }
+  .row label { display: inline-flex; gap: 6px; align-items: center; }
+  dialog { background: var(--bg-deep); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); max-width: 520px; }
+  dialog::backdrop { background: #0008; }
+</style></head>
+<body>
+<nav class="tabs" id="tabs">
+  <button data-tab="start" class="active">♻ Start</button>
+  <button data-tab="analyse">📊 Analyse</button>
+  <button data-tab="dubletten">⧉ Dubletten <span class="badge" id="bDup" hidden></span></button>
+  <button data-tab="plan">🗂 Plan <span class="badge" id="bPlan" hidden></span></button>
+  <button data-tab="verlauf">↶ Verlauf</button>
+</nav>
+<div class="status" id="status"><span class="dot warn"></span><b id="stPhase"></b><span class="muted" id="stMsg"></span><div class="bar"><i id="stBar" style="width:0%"></i></div><button class="btn sm danger" id="cancel">Abbrechen</button></div>
+<main id="main"></main>
+
+<dialog id="autoDlg"><form method="dialog">
+  <h2 style="margin-top:0">🤖 Autopilot freigeben</h2>
+  <p>Der Autopilot scannt, findet Dubletten und <b>verschiebt danach selbstständig</b> alle Dateien nach deinen Regeln.</p>
+  <ul>
+    <li>Es wird <b>nichts gelöscht</b> – Dubletten landen in <code>_Dubletten</code>.</li>
+    <li>Projekte (mit .git, package.json …) bleiben unberührt.</li>
+    <li>Alles kann im <b>Verlauf</b> rückgängig gemacht werden.</li>
+  </ul>
+  <p class="muted small">Tipp: Beim ersten Mal lieber „Analysieren“ und den Plan ansehen.</p>
+  <label class="row"><input type="checkbox" id="autoOk" required> Verstanden – Autopilot darf Dateien verschieben</label>
+  <div class="row" style="margin-top:14px"><span class="grow"></span><button class="btn" value="cancel" formnovalidate>Abbrechen</button><button class="btn primary" value="ok">Freigeben &amp; starten</button></div>
+</form></dialog>
+
+<script src="/zentrale-sdk.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const bytes = (n) => { const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; n = n || 0; while (n >= 1024 && i < 4) { n /= 1024; i++; } return `${n.toFixed(i ? 1 : 0)} ${u[i]}`; };
+const date = (ms) => new Date(ms).toLocaleDateString('de-DE');
+const when = (ms) => new Date(ms).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+const Z = window.zentrale || null; // in der Zentrale: Toasts + KI
+const notify = (t, type = 'info') => Z ? Z.notify(t, type) : console.log(t);
+async function api(url, data, method) {
+  const r = await fetch(url, { method: method || (data ? 'POST' : 'GET'), headers: { 'Content-Type': 'application/json' }, body: data ? JSON.stringify(data) : undefined });
+  const j = await r.json();
+  if (j && j.error) throw new Error(j.error);
+  return j;
+}
+let tab = 'start', config = {}, home = {}, wasBusy = false, planFilter = '', planOffset = 0;
+
+// ---------- Status-Leiste ----------
+const PHASE = { scannen: 'Scanne Ordner', dubletten: 'Suche Dubletten', analyse: 'Analysiere', ausführen: 'Räume auf', 'rückgängig': 'Mache rückgängig' };
+async function poll() {
+  let st;
+  try { st = await api('api/status'); } catch { return setTimeout(poll, 2000); }
+  $('#status').classList.toggle('on', st.busy);
+  if (st.busy) {
+    $('#stPhase').textContent = PHASE[st.phase] || st.phase;
+    $('#stMsg').textContent = st.message || '';
+    $('#stBar').style.width = Math.round((st.progress || 0) * 100) + '%';
+  }
+  if (wasBusy && !st.busy) {
+    if (st.phase === 'fertig') notify('♻ Aufräumen: Vorgang fertig', 'ok');
+    else if (st.error) notify('♻ Aufräumen: ' + st.error, st.phase === 'abgebrochen' ? 'warn' : 'err');
+    refreshBadges(); show(tab);
+  }
+  wasBusy = st.busy;
+  setTimeout(poll, st.busy ? 700 : 3000);
+}
+$('#cancel').onclick = () => api('api/cancel', {});
+
+async function refreshBadges() {
+  const [d, p] = await Promise.all([api('api/duplicates'), api('api/plan')]);
+  const nd = d.groups.length, np = p ? p.summary.total : 0;
+  $('#bDup').hidden = !nd; $('#bDup').textContent = nd;
+  $('#bPlan').hidden = !np; $('#bPlan').textContent = np;
+}
+
+// ---------- Tabs ----------
+$('#tabs').onclick = (e) => { const b = e.target.closest('[data-tab]'); if (b) show(b.dataset.tab); };
+function show(t) {
+  tab = t;
+  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
+  ({ start, analyse, dubletten, plan, verlauf })[t]();
+}
+
+// ---------- Start ----------
+async function start() {
+  config = await api('api/config');
+  const [an, pl, checks] = await Promise.all([api('api/analysis'), api('api/plan'), api('api/check', { paths: config.roots })]);
+  $('#main').innerHTML = `<div class="page">
+    <h2>♻ Aufräumen</h2>
+    <div class="hero">
+      <div class="card"><b>🔍 Analysieren</b><p class="muted small">Scannt die Ordner, findet Dubletten und erstellt einen Sortier-Plan. <b>Verändert nichts.</b></p><button class="btn primary" id="goAnalyze">Analysieren</button></div>
+      <div class="card"><b>▶ Plan ausführen</b><p class="muted small">${pl ? `${pl.summary.total} Dateien verschieben (${pl.summary.duplicates} Dubletten, ${pl.summary.sorted} einsortieren).` : 'Erst analysieren.'}</p><button class="btn" id="goApply" ${pl && pl.summary.total ? '' : 'disabled'}>Plan ausführen</button></div>
+      <div class="card"><b>🤖 Autopilot</b><p class="muted small">Alles in einem Durchgang: scannen → Dubletten → sortieren. ${config.autopilotConfirmed ? '<span class="badge ok">freigegeben</span>' : ''}</p><button class="btn" id="goAuto">Autopilot starten</button></div>
+    </div>
+    <div class="safe">🛡 <b>Sicher:</b> Es wird nie etwas gelöscht. Dubletten kommen nach <code>${esc(config.target)}/_Dubletten</code>, Projekte bleiben ganz, jeder Lauf ist im <b>Verlauf</b> rückgängig zu machen.</div>
+    ${an ? `<div class="muted small">Letzte Analyse: ${when(an.created)} · ${an.files} Dateien · ${bytes(an.size)} · ${an.duplicates.files} Dubletten (${bytes(an.duplicates.wasted)} verschwendet)</div>` : ''}
+
+    <h2>Einstellungen</h2>
+    <div class="card">
+      <label class="field"><span>Ordner, die aufgeräumt werden (einer pro Zeile)</span>
+        <textarea class="input" id="roots" rows="5">${esc(config.roots.join('\n'))}</textarea></label>
+      <div class="small" style="margin:-8px 0 12px">${checks.map((c) => `<span class="badge ${c.ok ? 'ok' : 'err'}" title="${esc(c.abs)}">${c.ok ? '✓' : '✕'} ${esc(c.path.split(/[\\/]/).pop() || c.path)}${c.ok ? ` · ${c.entries}` : ' fehlt'}</span>`).join(' ')}</div>
+      <label class="field"><span>Ziel – hier wird neu sortiert (Kategorie / Jahr${config.byMonthFor.length ? ' / Monat bei Bildern & Videos' : ''})</span><input class="input mono" id="target" value="${esc(config.target)}"></label>
+      <label class="field"><span>Ausnahmen – diese Ordner nie anfassen (einer pro Zeile)</span><textarea class="input" id="exclude" rows="2" placeholder="z. B. ${esc(home.home || '~')}/Dokumente/Steuer">${esc(config.exclude.join('\n'))}</textarea></label>
+      <div class="row" style="gap:18px;margin-bottom:12px">
+        <label><input type="checkbox" id="sortFiles" ${config.sortFiles ? 'checked' : ''}> Dateien einsortieren</label>
+        <label><input type="checkbox" id="handleDuplicates" ${config.handleDuplicates ? 'checked' : ''}> Dubletten in Quarantäne</label>
+        <label>Behalten wird: <select class="input" id="keepRule">
+          <option value="oldest" ${config.keepRule === 'oldest' ? 'selected' : ''}>älteste Kopie</option>
+          <option value="newest" ${config.keepRule === 'newest' ? 'selected' : ''}>neueste Kopie</option>
+          <option value="shortest" ${config.keepRule === 'shortest' ? 'selected' : ''}>kürzester Pfad</option></select></label>
+        <label>Dubletten ab <input class="input" type="number" id="minDupSize" value="${Math.round(config.minDupSize / 1024)}" style="width:80px"> KB</label>
+      </div>
+      <div class="row"><span class="grow"></span><button class="btn" id="resetCfg">Standard</button><button class="btn primary" id="saveCfg">Speichern</button></div>
+    </div>
+  </div>`;
+  const collect = () => ({
+    roots: $('#roots').value.split('\n').map((s) => s.trim()).filter(Boolean),
+    exclude: $('#exclude').value.split('\n').map((s) => s.trim()).filter(Boolean),
+    target: $('#target').value.trim(), sortFiles: $('#sortFiles').checked, handleDuplicates: $('#handleDuplicates').checked,
+    keepRule: $('#keepRule').value, minDupSize: Math.max(0, +$('#minDupSize').value || 0) * 1024,
+  });
+  const saveCfg = async () => { config = await api('api/config', collect(), 'PUT'); };
+  $('#saveCfg').onclick = async () => { await saveCfg(); notify('Einstellungen gespeichert', 'ok'); start(); };
+  $('#resetCfg').onclick = async () => { const d = await api('api/defaults'); await api('api/config', { ...d, autopilotConfirmed: config.autopilotConfirmed }, 'PUT'); start(); };
+  $('#goAnalyze').onclick = async () => { try { await saveCfg(); await api('api/analyze', {}); wasBusy = true; poll(); } catch (e) { notify(e.message, 'err'); } };
+  $('#goApply').onclick = async () => {
+    if (!confirm(`${pl.summary.total} Dateien jetzt verschieben?\n\nNichts wird gelöscht, alles ist rückgängig zu machen.`)) return;
+    try { await api('api/apply', {}); wasBusy = true; poll(); } catch (e) { notify(e.message, 'err'); }
+  };
+  $('#goAuto').onclick = async () => {
+    await saveCfg();
+    if (!config.autopilotConfirmed) { $('#autoOk').checked = false; $('#autoDlg').showModal(); return; }
+    try { await api('api/autopilot', {}); wasBusy = true; poll(); } catch (e) { notify(e.message, 'err'); }
+  };
+}
+$('#autoDlg').onclose = async () => {
+  if ($('#autoDlg').returnValue !== 'ok') return;
+  config = await api('api/config', { autopilotConfirmed: true }, 'PUT');
+  try { await api('api/autopilot', {}); wasBusy = true; poll(); } catch (e) { notify(e.message, 'err'); }
+};
+
+// ---------- Analyse ----------
+async function analyse() {
+  const a = await api('api/analysis');
+  if (!a) { $('#main').innerHTML = '<div class="empty">Noch keine Analyse – auf „Start“ → Analysieren.</div>'; return; }
+  const max = Math.max(...a.categories.map((c) => c.size), 1);
+  const maxY = Math.max(...a.years.map((y) => y.count), 1);
+  $('#main').innerHTML = `<div class="page">
+    <div class="row"><h2 style="margin:0" class="grow">📊 Analyse <span class="muted small" style="font-weight:normal">${when(a.created)}</span></h2>${Z ? '<button class="btn" id="kiBtn">✦ KI-Einschätzung</button>' : ''}</div>
+    <div class="grid" style="margin-top:12px">
+      <div class="card stat"><span class="muted">Dateien</span><b>${a.files.toLocaleString('de-DE')}</b><span class="small muted">${bytes(a.size)}</span></div>
+      <div class="card stat"><span class="muted">Dubletten</span><b>${a.duplicates.files.toLocaleString('de-DE')}</b><span class="small muted">${bytes(a.duplicates.wasted)} verschwendet</span></div>
+      <div class="card stat"><span class="muted">Projekte (bleiben ganz)</span><b>${a.projects.length}</b><span class="small muted">${bytes(a.projects.reduce((s, p) => s + p.size, 0))}</span></div>
+      <div class="card stat"><span class="muted">Leere Ordner</span><b>${a.emptyDirs}</b><span class="small muted">werden entfernt</span></div>
+    </div>
+    <div id="kiOut" class="card md" style="margin-top:12px;display:none"></div>
+    <h2>Nach Art</h2>
+    <div class="card">${a.categories.map((c) => `<div class="catrow"><span>${esc(c.name)}</span><div class="bar"><i style="width:${(c.size / max) * 100}%"></i></div><span class="small mono">${bytes(c.size)}</span><span class="small muted">${c.count}</span></div>`).join('')}</div>
+    <h2>Nach Jahr</h2>
+    <div class="card" style="display:flex;align-items:flex-end;gap:4px;height:120px">${a.years.map((y) => `<div title="${y.year}: ${y.count} Dateien" style="flex:1;max-width:40px;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:100%;background:var(--cyan);opacity:.7;height:${(y.count / maxY) * 80}px"></div><span class="small muted">${String(y.year).slice(2)}</span></div>`).join('')}</div>
+    ${a.projects.length ? `<h2>Erkannte Projekte <span class="muted small" style="font-weight:normal">(werden nicht angefasst)</span></h2><table class="list card" style="padding:0">${a.projects.map((p) => `<tr><td class="mono small">${esc(p.path)}</td><td class="small">${p.files} Dateien</td><td class="small">${bytes(p.size)}</td></tr>`).join('')}</table>` : ''}
+    <h2>Größte Dateien</h2>
+    <table class="list card mv" style="padding:0">${a.largest.map((f) => `<tr><td>${esc(f.path)}</td><td>${bytes(f.size)}</td><td class="muted">${date(f.mtime)}</td></tr>`).join('')}</table>
+    ${a.old.length ? `<h2>Große, alte Dateien <span class="muted small" style="font-weight:normal">(> 50 MB, älter als 2 Jahre – Kandidaten zum Archivieren)</span></h2><table class="list card mv" style="padding:0">${a.old.map((f) => `<tr><td>${esc(f.path)}</td><td>${bytes(f.size)}</td><td class="muted">${date(f.mtime)}</td></tr>`).join('')}</table>` : ''}
+  </div>`;
+  if ($('#kiBtn')) $('#kiBtn').onclick = async () => {
+    const summary = { dateien: a.files, groesse: bytes(a.size), kategorien: a.categories.map((c) => `${c.name}: ${c.count} (${bytes(c.size)})`), jahre: a.years, dubletten: a.duplicates, projekte: a.projects.map((p) => p.name), groessteDateien: a.largest.slice(0, 10).map((f) => `${f.path} (${bytes(f.size)})`) };
+    $('#kiOut').style.display = ''; $('#kiOut').textContent = '✦ denkt nach …';
+    try {
+      const r = await Z.ki.ask({ prompt: `Ich räume meinen PC auf. Hier ist die Analyse meiner Ordner (nur Statistik, keine Inhalte):\n\n${JSON.stringify(summary, null, 1)}\n\nGib mir eine kurze Einschätzung auf Deutsch: Was fällt auf? Was sollte ich zuerst tun (z. B. archivieren, Dubletten, große Dateien)? Welche Ordnerstruktur empfiehlst du für die Zukunft? Max. 10 Stichpunkte.`, onChunk: (_, all) => { $('#kiOut').innerHTML = window.renderMarkdown ? renderMarkdown(all) : esc(all); } });
+      if (!r.text) $('#kiOut').textContent = r.error || 'Keine Antwort – KI angemeldet?';
+    } catch (e) { $('#kiOut').textContent = e.message; }
+  };
+}
+
+// ---------- Dubletten ----------
+async function dubletten() {
+  const d = await api('api/duplicates');
+  if (!d.groups.length) { $('#main').innerHTML = '<div class="empty">Keine Dubletten gefunden (oder noch nicht analysiert).</div>'; return; }
+  const wasted = d.groups.reduce((s, g) => s + g.size * (g.files.length - 1), 0);
+  const shown = d.groups.slice(0, 300);
+  $('#main').innerHTML = `<div class="page">
+    <h2>⧉ ${d.groups.length} Dubletten-Gruppen · ${bytes(wasted)} doppelt</h2>
+    <p class="muted small">Gleicher Inhalt (SHA-256 geprüft). <span style="color:var(--green)">Grün</span> bleibt, die anderen kommen in die Quarantäne. Klick auf eine Datei = diese behalten.</p>
+    ${shown.map((g) => `<div class="card grp" data-hash="${g.hash}">
+      <div class="row small"><b>${esc(g.files[0].split(/[\\/]/).pop())}</b><span class="badge">${esc(g.cat)}</span><span class="muted">${bytes(g.size)} × ${g.files.length}</span></div>
+      ${g.files.map((f) => `<div class="f ${f === g.keep ? 'keep' : 'dup'}" data-keep="${esc(f)}">${f === g.keep ? '✓' : '→'} ${esc(f)}</div>`).join('')}
+    </div>`).join('')}
+    ${d.groups.length > shown.length ? `<p class="muted">… und ${d.groups.length - shown.length} weitere Gruppen.</p>` : ''}
+  </div>`;
+  $('#main').onclick = async (e) => {
+    const f = e.target.closest('[data-keep]'); if (!f || tab !== 'dubletten') return;
+    const hash = f.closest('[data-hash]').dataset.hash;
+    try { await api('api/keep', { hash, keep: f.dataset.keep }); dubletten(); refreshBadges(); } catch (err) { notify(err.message, 'err'); }
+  };
+}
+
+// ---------- Plan ----------
+async function plan() {
+  const p = await api('api/plan?offset=' + planOffset + '&filter=' + encodeURIComponent(planFilter));
+  if (!p) { $('#main').innerHTML = '<div class="empty">Kein offener Plan – erst analysieren (oder der letzte Plan wurde schon ausgeführt).</div>'; return; }
+  const reasons = ['Dublette', 'Bilder', 'Videos', 'Musik', 'Dokumente', 'Tabellen', 'Präsentationen', 'Archive', 'Programme', 'Code', 'Sonstiges'];
+  $('#main').innerHTML = `<div class="page">
+    <div class="row"><h2 style="margin:0" class="grow">🗂 Plan: ${p.summary.total} Verschiebungen</h2><button class="btn primary" id="applyBtn">▶ Ausführen</button></div>
+    <p class="muted small">${p.summary.duplicates} Dubletten → Quarantäne · ${p.summary.sorted} Dateien einsortieren nach <code>${esc(p.target)}</code> · ${p.summary.projectsUntouched} Projekte bleiben unberührt</p>
+    <div class="row" style="margin:10px 0"><select class="input" id="filter"><option value="">Alle</option>${reasons.map((r) => `<option ${r === planFilter ? 'selected' : ''}>${r}</option>`).join('')}</select>
+      <span class="muted small">${p.filtered} Einträge${p.filtered > 300 ? ` · zeige ${planOffset + 1}–${Math.min(planOffset + 300, p.filtered)}` : ''}</span><span class="grow"></span>
+      ${planOffset > 0 ? '<button class="btn sm" id="prev">←</button>' : ''}${planOffset + 300 < p.filtered ? '<button class="btn sm" id="next">→</button>' : ''}</div>
+    <table class="card mv" style="width:100%;border-collapse:collapse;padding:0">${p.moves.map((m) => `<tr><td><span class="badge ${m.reason === 'Dublette' ? 'warn' : ''}">${esc(m.reason)}</span></td><td>${esc(m.from)}<br><span class="arrow">→</span> ${esc(m.to)}</td></tr>`).join('')}</table>
+  </div>`;
+  $('#filter').onchange = () => { planFilter = $('#filter').value; planOffset = 0; plan(); };
+  if ($('#prev')) $('#prev').onclick = () => { planOffset -= 300; plan(); };
+  if ($('#next')) $('#next').onclick = () => { planOffset += 300; plan(); };
+  $('#applyBtn').onclick = async () => {
+    if (!confirm(`${p.summary.total} Dateien jetzt verschieben?\n\nNichts wird gelöscht, alles ist rückgängig zu machen.`)) return;
+    try { await api('api/apply', {}); wasBusy = true; poll(); } catch (e) { notify(e.message, 'err'); }
+  };
+}
+
+// ---------- Verlauf ----------
+async function verlauf() {
+  const js = await api('api/journals');
+  $('#main').innerHTML = `<div class="page"><h2>↶ Verlauf</h2>
+    ${js.length ? `<table class="list card" style="padding:0">${js.map((j) => `<tr><td>${when(j.created)}</td><td>${j.moved} verschoben${j.duplicates ? ` (${j.duplicates} Dubletten)` : ''}${j.failed ? ` · <span style="color:var(--red)">${j.failed} Fehler</span>` : ''}</td>
+      <td>${j.undone ? `<span class="badge">rückgängig gemacht ${when(j.undone)}</span>` : `<button class="btn sm" data-undo="${j.id}">↶ Rückgängig</button>`}</td></tr>`).join('')}</table>` : '<div class="empty">Noch nichts ausgeführt.</div>'}
+  </div>`;
+  $('#main').onclick = async (e) => {
+    const b = e.target.closest('[data-undo]'); if (!b || tab !== 'verlauf') return;
+    if (!confirm('Alle Verschiebungen dieses Laufs rückgängig machen?')) return;
+    try { await api('api/undo', { id: b.dataset.undo }); wasBusy = true; poll(); } catch (err) { notify(err.message, 'err'); }
+  };
+}
+
+(async () => {
+  home = await api('api/home');
+  if (Z) { const s = document.createElement('script'); s.src = '/md.js'; document.head.appendChild(s); }
+  await refreshBadges();
+  start();
+  poll();
+})();
+</script>
+</body></html>

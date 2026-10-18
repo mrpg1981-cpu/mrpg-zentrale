@@ -108,6 +108,16 @@ Beim ersten Öffnen erledigt die Zentrale Folgendes:
 Der Server erscheint unter **Prozesse** mit Live-Log.
 **Wichtig für eigene Apps:** im Frontend relative URLs verwenden (`fetch('api/…')` statt `fetch('/api/…')`).
 
+## ♻ Modul „Aufräumen“
+
+Es scannt die eingestellten Ordner (Standard: Downloads, Dokumente, Bilder, Desktop, Videos, Musik), findet **Dubletten** und sortiert alles neu nach `~/Sortiert/<Kategorie>/<Jahr>/`. Bilder und Videos kommen zusätzlich in einen Monatsordner.
+
+- **Dubletten:** nur bei echt gleichem Inhalt (Größe, dann Anfang und Ende, dann SHA-256). Es bleibt eine Kopie nach deiner Regel: älteste, neueste oder kürzester Pfad. Die anderen kommen nach `Sortiert/_Dubletten/<Datum>/`.
+- **Sicherheit:** Es wird **nie gelöscht**. Projekte (Ordner mit `.git`, `package.json` …) bleiben ganz, und jeder Lauf ist im Verlauf **rückgängig** zu machen.
+- **Ablauf:** *Analysieren* ändert nichts und zeigt den Plan. *Plan ausführen* verschiebt. Der **Autopilot** macht alles in einem Durchgang, nach einmaliger Freigabe.
+- **KI-Einschätzung:** Die KI bekommt nur Statistik und Dateinamen, keine Inhalte, und schlägt eine Ordnerstruktur vor.
+- **Docker:** Die PC-Ordner musst du in `docker-compose.yml` einbinden (Beispiel dort). Portabel gestartet sieht das Modul direkt deinen ganzen PC.
+
 ## Ordner
 ```
 server.js        Kern: Routen, Anmeldung, WebSocket

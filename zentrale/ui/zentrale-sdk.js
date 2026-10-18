@@ -1,6 +1,6 @@
 // Zentrale-SDK – in jedem Modul einbinden: <script src="/zentrale-sdk.js"></script>
 (function () {
-  const moduleId = (location.pathname.match(/^\/(?:modules|core)\/([\w-]+)/) || [])[1] || 'zentrale';
+  const moduleId = (location.pathname.match(/^\/(?:modules|core|m)\/([\w-]+)/) || [])[1] || 'zentrale';
 
   async function api(method, url, body, raw) {
     const res = await fetch(url, {
