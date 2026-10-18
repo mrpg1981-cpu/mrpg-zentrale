@@ -1,0 +1,162 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRPG Commander</title><style>
+:root{--bg:#2b2f36;--panel:#24272d;--line:#59616d;--cyan:#67f5ff;--text:#f2f5f7;--muted:#b9bec7;--sel:#ffd84a;--dir:#ffffff}
+*{box-sizing:border-box}
+body{margin:0;height:100vh;background:var(--bg);color:var(--text);font:14px/1.35 Consolas,"Courier New",monospace;display:grid;grid-template-rows:auto 1fr auto auto;user-select:none}
+.top{display:flex;gap:8px;align-items:center;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{color:var(--cyan);font-weight:bold;font-size:16px;margin-right:8px}
+.top input,.top select{background:#383c44;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;width:130px}
+.top select{width:80px}.top input.port{width:62px}
+.btn{background:#383c44;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 11px;cursor:pointer;font:inherit}
+.primary{background:var(--cyan);color:#111;border-color:var(--cyan)}
+#conn{margin-left:auto;color:var(--muted);font-size:12px}#conn.on{color:#3fb950}
+main{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px;min-height:0}
+.pane{border:3px double var(--line);display:flex;flex-direction:column;min-height:0;background:var(--panel)}
+.pane.active{border-color:var(--cyan)}
+.ptitle{text-align:center;margin-top:-12px}.ptitle span{background:var(--panel);padding:0 6px;color:var(--muted)}
+.pane.active .ptitle span{background:var(--cyan);color:#111}
+.cols,.row{display:grid;grid-template-columns:1fr 80px 130px;gap:8px;padding:1px 8px}
+.cols{color:var(--cyan);border-bottom:1px solid var(--line);font-weight:bold}
+.list{flex:1;overflow:auto;outline:0}
+.row{cursor:default}.row span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .s,.row .d,.cols .s,.cols .d{text-align:right}
+.row.dir .n{color:var(--dir);font-weight:bold}.row.file .n{color:var(--muted)}
+.row.marked .n,.row.marked span{color:var(--sel)!important}
+.pane.active .row.cur{background:var(--cyan)}.pane.active .row.cur span{color:#111!important}
+.pane .row.cur{background:#67f5ff22}
+.pinfo{border-top:1px solid var(--line);padding:2px 8px;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#log{height:84px;overflow:auto;background:#171a1f;color:#3fb950;padding:4px 10px;font-size:12px;white-space:pre-wrap;border-top:1px solid var(--line)}
+#log .err{color:#ff6b6b}
+.fkeys{display:grid;grid-template-columns:repeat(10,1fr);background:#171a1f}
+.fkeys button{background:transparent;border:0;color:#111;font:inherit;padding:3px 0;cursor:pointer;display:flex}
+.fkeys b{color:var(--text);padding:0 4px}.fkeys i{font-style:normal;background:var(--cyan);flex:1;text-align:left;padding-left:4px;margin-right:4px}
+.fkeys button:disabled i{background:#59616d}
+dialog{background:var(--panel);color:var(--text);border:3px double var(--cyan);padding:16px 20px;min-width:340px;font:inherit}
+dialog::backdrop{background:#0008}dialog h3{margin:0 0 10px;color:var(--cyan);font-size:15px}
+dialog input{width:100%;background:#383c44;color:var(--text);border:1px solid var(--line);padding:6px;font:inherit;margin-bottom:12px}
+dialog .act{display:flex;gap:8px;justify-content:flex-end}
+@media(max-width:800px){main{grid-template-columns:1fr}.cols,.row{grid-template-columns:1fr 70px}.d{display:none}}
+</style></head><body>
+<header class="top">
+  <div class="brand">〄 MRPG Commander</div>
+  <select id="proto"><option value="sftp">SFTP</option><option value="ftp">FTP</option><option value="ftps">FTPS</option></select>
+  <input id="host" placeholder="Server">
+  <input id="port" class="port" placeholder="Port">
+  <input id="user" placeholder="Benutzer">
+  <input id="pass" type="password" placeholder="Passwort">
+  <button class="btn primary" id="connBtn">⚡ Verbinden</button>
+  <button class="btn" id="discBtn">✕ Trennen</button>
+  <span id="conn">● offline</span>
+</header>
+<main>
+  <section class="pane active" id="pane-local"><div class="ptitle"><span>LOKAL</span></div><div class="cols"><span>Name</span><span class="s">Größe</span><span class="d">Datum</span></div><div class="list" tabindex="0"></div><div class="pinfo"></div></section>
+  <section class="pane" id="pane-remote"><div class="ptitle"><span>SERVER</span></div><div class="cols"><span>Name</span><span class="s">Größe</span><span class="d">Datum</span></div><div class="list" tabindex="0"></div><div class="pinfo">Nicht verbunden</div></section>
+</main>
+<div id="log">MRPG Commander bereit · Tab = Panel wechseln · Enter = öffnen · Einfg/Leertaste = markieren · F5 = Upload/Download</div>
+<nav class="fkeys">
+  <button data-k="F1"><b>1</b><i>Hilfe</i></button><button data-k="F2"><b>2</b><i>Neu ⟳</i></button><button disabled><b>3</b><i></i></button><button disabled><b>4</b><i></i></button>
+  <button data-k="F5"><b>5</b><i>Kopie</i></button><button data-k="F6"><b>6</b><i>Umben.</i></button><button data-k="F7"><b>7</b><i>MkDir</i></button><button data-k="F8"><b>8</b><i>Lösch.</i></button>
+  <button disabled><b>9</b><i></i></button><button data-k="F10"><b>10</b><i>Trennen</i></button>
+</nav>
+<dialog id="dlg"><h3 id="dlgT"></h3><p id="dlgM"></p><input id="dlgI"><div class="act"><button class="btn" value="no" id="dlgNo">Abbrechen</button><button class="btn primary" id="dlgOk">OK</button></div></dialog>
+<script>
+(()=>{
+const $=id=>document.getElementById(id), LS='mrpg-commander';
+const api=async(url,data)=>{const r=await fetch(url,{method:data?'POST':'GET',body:data&&JSON.stringify(data)});const j=await r.json();if(j.error)throw new Error(j.error);return j};
+const log=(m,err)=>{const d=document.createElement('div');d.textContent=new Date().toLocaleTimeString()+'  '+m;if(err)d.className='err';$('log').appendChild(d);$('log').scrollTop=1e9};
+const fmtSize=f=>f.dir?'<DIR>':f.size<1024?f.size+' B':f.size<1048576?(f.size/1024).toFixed(1)+' K':(f.size/1048576).toFixed(1)+' M';
+const fmtDate=t=>t?new Date(t).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''):'';
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const mk=side=>({side,el:$('pane-'+side),path:'',files:[],cur:0,marked:new Set(),
+  sep(){return this.side==='local'&&this.path.includes('\\')?'\\':'/'},
+  join(n){const s=this.sep();return this.path.endsWith(s)?this.path+n:this.path+s+n},
+  parent(){const s=this.sep(),p=this.path.replace(/[\\/]+$/,''),i=p.lastIndexOf(s);if(i<0)return this.path;const r=p.slice(0,i+1);return r.length>1&&!/^[A-Za-z]:\\$/.test(r)?r.slice(0,-1):r}});
+const P={local:mk('local'),remote:mk('remote')};let act=P.local,connected=false;
+const other=()=>act===P.local?P.remote:P.local;
+
+async function load(p,path,keep){
+  if(p.side==='remote'&&!connected){p.files=[];draw(p);return}
+  try{const {files}=await api('/api/list',{side:p.side,path});
+    files.sort((a,b)=>(b.dir-a.dir)||a.name.localeCompare(b.name));
+    const prev=p.path;p.path=path;p.files=[{name:'..',dir:true,up:true},...files.filter(f=>f.name!=='.'&&f.name!=='..')];p.marked.clear();
+    if(!keep){const back=prev&&prev.startsWith(path)?prev.slice(path.length).replace(/^[\\/]/,'').split(/[\\/]/)[0]:null;const i=p.files.findIndex(f=>f.name===back);p.cur=i>0?i:0}
+    p.cur=Math.min(p.cur,p.files.length-1);
+    if(p.side==='local')try{localStorage.setItem(LS+'-lp',path)}catch{}
+    draw(p)}catch(e){log(p.side+': '+e.message,1)}
+}
+function draw(p){
+  const list=p.el.querySelector('.list');
+  list.innerHTML=p.files.map((f,i)=>`<div class="row ${f.dir?'dir':'file'} ${i===p.cur?'cur':''} ${p.marked.has(f.name)?'marked':''}" data-i="${i}"><span class="n">${f.dir&&!f.up?'/':' '}${esc(f.name)}</span><span class="s">${f.up?'UP--DIR':esc(fmtSize(f))}</span><span class="d">${fmtDate(f.mtime)}</span></div>`).join('');
+  const c=list.children[p.cur];c&&c.scrollIntoView({block:'nearest'});
+  const m=[...p.marked],sum=p.files.filter(f=>m.includes(f.name)).reduce((a,f)=>a+(f.size||0),0);
+  p.el.querySelector('.pinfo').textContent=(p.side==='remote'&&!connected)?'Nicht verbunden':(m.length?`${m.length} markiert · ${fmtSize({size:sum})}`:p.path);
+}
+function setActive(p){act=p;for(const x of Object.values(P)){x.el.classList.toggle('active',x===p);draw(x)}p.el.querySelector('.list').focus()}
+const selected=p=>p.marked.size?[...p.marked]:(p.files[p.cur]&&!p.files[p.cur].up?[p.files[p.cur].name]:[]);
+
+function ask(title,msg,val){return new Promise(ok=>{const d=$('dlg');$('dlgT').textContent=title;$('dlgM').textContent=msg||'';const inp=$('dlgI');inp.style.display=val===undefined?'none':'block';inp.value=val||'';
+  const done=v=>{d.close();$('dlgOk').onclick=$('dlgNo').onclick=inp.onkeydown=null;setActive(act);ok(v)};
+  $('dlgOk').onclick=()=>done(val===undefined?true:inp.value);$('dlgNo').onclick=()=>done(null);
+  inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();done(inp.value)}};d.oncancel=e=>{e.preventDefault();done(null)};
+  d.showModal();(val===undefined?$('dlgOk'):inp).focus();inp.select()})}
+
+async function enter(){const f=act.files[act.cur];if(!f)return;if(!f.dir){log(f.name+' – F5 zum Kopieren');return}
+  await load(act,f.up?act.parent():act.join(f.name))}
+async function copy(){
+  if(!connected)return log('Erst mit Server verbinden',1);
+  const src=act,dst=other(),names=selected(src);if(!names.length)return;
+  const dir=src.side==='local'?'up':'down';
+  if(!await ask(dir==='up'?'Hochladen':'Herunterladen',`${names.length} Element(e) nach ${dst.path} ${dir==='up'?'hochladen':'herunterladen'}?`))return;
+  log((dir==='up'?'⬆ ':'⬇ ')+names.join(', ')+' …');
+  try{await api('/api/copy',{dir,src:src.path,dst:dst.path,names});log('✔ Fertig');await load(dst,dst.path,1);src.marked.clear();draw(src)}catch(e){log(e.message,1)}
+}
+async function rename(){const n=selected(act)[0];if(!n)return;const v=await ask('Umbenennen',n,n);if(!v||v===n)return;
+  try{await api('/api/rename',{side:act.side,from:act.join(n),to:act.join(v)});log(n+' → '+v);load(act,act.path,1)}catch(e){log(e.message,1)}}
+async function mkdir(){const v=await ask('Neuer Ordner','in '+act.path,'');if(!v)return;
+  try{await api('/api/mkdir',{side:act.side,path:act.join(v)});log('Ordner '+v+' angelegt');load(act,act.path,1)}catch(e){log(e.message,1)}}
+async function del(){const names=selected(act);if(!names.length)return;if(!await ask('Löschen',`${names.length} Element(e) wirklich löschen?\n${names.join(', ')}`))return;
+  try{for(const n of names)await api('/api/delete',{side:act.side,path:act.join(n)});log('🗑 '+names.join(', '));load(act,act.path,1)}catch(e){log(e.message,1)}}
+
+async function connect(){
+  const c={proto:$('proto').value,host:$('host').value.trim(),port:$('port').value.trim(),user:$('user').value.trim(),pass:$('pass').value};
+  if(!c.host)return log('Server fehlt',1);
+  try{localStorage.setItem(LS,JSON.stringify({...c,pass:undefined}))}catch{}
+  log('Verbinde mit '+c.proto+'://'+c.host+' …');
+  try{const {home}=await api('/api/connect',c);connected=true;setConn(c.user+'@'+c.host);log('✔ Verbunden');await load(P.remote,home);setActive(P.remote)}
+  catch(e){log('Verbindung fehlgeschlagen: '+e.message,1)}}
+async function disconnect(){await api('/api/disconnect',{}).catch(()=>{});connected=false;setConn();P.remote.files=[];draw(P.remote);log('Getrennt')}
+function setConn(info){$('conn').textContent=info?'● '+info:'● offline';$('conn').classList.toggle('on',!!info)}
+
+const keys={F1:()=>log('Pfeile/Pos1/Ende/BildAuf/Ab bewegen · Enter öffnen · Backspace hoch · Einfg/Leertaste markieren · Strg+A alle · F5 Kopieren · F6 Umbenennen · F7 Ordner · F8/Entf Löschen · F10 Trennen'),
+  F2:()=>load(act,act.path,1),F5:copy,F6:rename,F7:mkdir,F8:del,Delete:del,F10:disconnect};
+document.addEventListener('keydown',e=>{
+  if($('dlg').open||e.target.closest('header'))return;
+  const p=act,n=p.files.length,page=Math.max(1,Math.floor(p.el.querySelector('.list').clientHeight/20)-1);
+  const mv=i=>{p.cur=Math.max(0,Math.min(n-1,i));draw(p)};
+  if(keys[e.key]){e.preventDefault();return keys[e.key]()}
+  switch(e.key){
+    case 'Tab':e.preventDefault();setActive(other());break;
+    case 'ArrowDown':e.preventDefault();mv(p.cur+1);break;case 'ArrowUp':e.preventDefault();mv(p.cur-1);break;
+    case 'PageDown':e.preventDefault();mv(p.cur+page);break;case 'PageUp':e.preventDefault();mv(p.cur-page);break;
+    case 'Home':e.preventDefault();mv(0);break;case 'End':e.preventDefault();mv(n-1);break;
+    case 'Enter':e.preventDefault();enter();break;
+    case 'Backspace':e.preventDefault();load(p,p.parent());break;
+    case 'Insert':case ' ':{e.preventDefault();const f=p.files[p.cur];if(f&&!f.up)p.marked.has(f.name)?p.marked.delete(f.name):p.marked.add(f.name);mv(p.cur+1);break}
+    case 'a':if(e.ctrlKey||e.metaKey){e.preventDefault();p.files.forEach(f=>!f.up&&p.marked.add(f.name));draw(p)}break;
+  }
+});
+for(const p of Object.values(P)){const list=p.el.querySelector('.list');
+  list.onclick=e=>{const r=e.target.closest('.row');if(act!==p)setActive(p);if(!r)return;p.cur=+r.dataset.i;if(e.ctrlKey){const f=p.files[p.cur];if(!f.up)p.marked.has(f.name)?p.marked.delete(f.name):p.marked.add(f.name)}draw(p)};
+  list.ondblclick=e=>{if(e.target.closest('.row'))enter()};}
+document.querySelectorAll('.fkeys [data-k]').forEach(b=>b.onclick=()=>keys[b.dataset.k]());
+$('connBtn').onclick=connect;$('discBtn').onclick=disconnect;
+$('pass').onkeydown=e=>{if(e.key==='Enter')connect()};
+$('proto').onchange=()=>$('port').placeholder=$('proto').value==='sftp'?'22':'21';
+
+(async()=>{try{const s=JSON.parse(localStorage.getItem(LS)||'{}');for(const k of ['proto','host','port','user'])if(s[k])$(k).value=s[k]}catch{}
+  $('proto').onchange();
+  const st=await api('/api/status');if(st.connected){connected=true;setConn(st.info)}
+  let lp=st.localHome;try{lp=localStorage.getItem(LS+'-lp')||lp}catch{}
+  await load(P.local,lp);if(connected)await load(P.remote,st.home);setActive(P.local)})().catch(e=>log('Backend nicht erreichbar – läuft "npm start"? '+e.message,1));
+})();
+</script></body></html>

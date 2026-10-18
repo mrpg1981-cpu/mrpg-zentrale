@@ -1,0 +1,16 @@
+{
+  "name": "mrpg-commander",
+  "version": "1.0.0",
+  "description": "Norton-Commander-Style FTP/SFTP Client im MRPG Design",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "basic-ftp": "^6.2.3",
+    "ssh2-sftp-client": "^12.1.1"
+  }
+}
