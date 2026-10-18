@@ -56,6 +56,7 @@ function emit(type, payload, from = 'zentrale') {
 }
 const procs = require('./lib/procs')({ runEnv, emit });
 const terminals = require('./lib/terminal')({ settings, runEnv });
+const team = require('./lib/team')({ dataDir: DIRS.data, ki, emit, resolveProject: (rel) => files.resolve(rel) });
 
 // ---------- Module: core/ (eingebaut) und modules/ (deine Apps) ----------
 function scan(dir, core) {
@@ -124,6 +125,19 @@ route('POST', '/api/ki/install', async (req) => {
   return procs.start({ name: `${provider} installieren`, cmd, cwd: DIRS.data });
 });
 route('POST', '/api/ki/logout', async (req) => { ki.logout((await readBody(req)).provider); return { ok: true }; });
+
+// KI-Team
+route('GET', '/api/team/recipes', () => team.RECIPES);
+route('GET', '/api/team', () => team.list());
+route('POST', '/api/team', async (req) => team.start(await readBody(req)));
+route('POST', /^\/api\/team\/(\w+)\/stop$/, (req, res, url, m) => { team.stop(m[1]); return { ok: true }; });
+route('DELETE', /^\/api\/team\/(\w+)$/, (req, res, url, m) => { team.remove(m[1]); return { ok: true }; });
+route('GET', /^\/api\/team\/(\w+)\/stream$/, (req, res, url, m) => {
+  const send = sse(res);
+  const off = team.subscribe(m[1], send);
+  const ping = setInterval(() => res.write(': ping\n\n'), 25000);
+  req.on('close', () => { off(); clearInterval(ping); });
+}, { stream: true });
 
 // Dateien
 route('GET', '/api/fs/list', (req, res, url) => files.list(url.searchParams.get('path') || ''));
@@ -272,7 +286,7 @@ if (cmd === 'login') {
       spawn(o[0], o[1], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
     }
   });
-  const shutdown = () => { procs.stopAll(); terminals.killAll(); setTimeout(() => process.exit(0), 300); };
+  const shutdown = () => { team.stopAll(); procs.stopAll(); terminals.killAll(); setTimeout(() => process.exit(0), 300); };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 }

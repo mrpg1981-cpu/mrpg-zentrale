@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KI-Team</title><link rel="stylesheet" href="/theme.css">
+<style>
+  body { height: 100vh; display: grid; grid-template-columns: 260px 1fr; }
+  .side { background: var(--bg-deep); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  #runs { flex: 1; overflow: auto; padding: 6px; }
+  .r { padding: 8px 10px; border-radius: var(--radius); cursor: pointer; }
+  .r:hover, .r.active { background: var(--cyan-soft); }
+  .r .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .r.active .t { color: var(--cyan); }
+  .main { overflow: auto; min-width: 0; }
+  .recipes { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+  .recipe { cursor: pointer; }
+  .recipe.sel { border-color: var(--cyan); background: var(--cyan-soft); }
+  .recipe b { color: var(--cyan); display: block; margin-bottom: 4px; }
+  #task { width: 100%; min-height: 110px; resize: vertical; }
+  .roles { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .chk { display: inline-flex; gap: 5px; align-items: center; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; margin: 0 6px 6px 0; }
+  .chk:has(input:checked) { border-color: var(--cyan); color: var(--cyan); }
+  .chain .st { display: grid; grid-template-columns: 30px 140px 150px 1fr 30px; gap: 8px; align-items: start; margin-bottom: 8px; }
+  .chain textarea { min-height: 38px; resize: vertical; font-family: var(--mono); font-size: 12px; }
+  /* Ablauf */
+  .flow { display: flex; flex-direction: column; gap: 12px; position: relative; }
+  .step { border-left: 3px solid var(--line); }
+  .step.läuft { border-left-color: var(--yellow); }
+  .step.fertig { border-left-color: var(--green); }
+  .step.fehler, .step.abgebrochen { border-left-color: var(--red); }
+  .step .head { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+  .step .out { margin-top: 10px; line-height: 1.55; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
+  .step.collapsed .out, .step.collapsed .tools, .step.collapsed .prompt { display: none; }
+  .tools { font: 11.5px var(--mono); color: var(--muted); margin-top: 8px; }
+  .tools div::before { content: '⚙ '; color: var(--yellow); }
+  .prompt summary { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .prompt pre { white-space: pre-wrap; font: 11.5px var(--mono); color: var(--muted); max-height: 200px; overflow: auto; }
+  .result { border-color: var(--cyan); }
+  .avatar { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: bold 12px var(--mono); color: #111; flex: none; }
+  .pulse { animation: pulse 1.2s infinite; } @keyframes pulse { 50% { opacity: .35; } }
+  #listBtn { display: none; }
+  @media (max-width: 760px) { #listBtn { display: inline-block; } body { grid-template-columns: 1fr; } .side { display: none; } body.list .side { display: flex; position: fixed; inset: 0; z-index: 5; } .chain .st { grid-template-columns: 1fr 1fr; } }
+</style></head>
+<body>
+<aside class="side">
+  <div class="toolbar"><button class="btn primary grow" id="newBtn">＋ Neues Team</button></div>
+  <div id="runs"></div>
+</aside>
+<div class="main" id="main"></div>
+
+<script src="/zentrale-sdk.js"></script>
+<script src="/md.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const { esc, ago } = zentrale.util;
+const COLORS = { claude: '#d97757', codex: '#10a37f', gemini: '#4c8df6', ollama: '#b9bec7' };
+let recipes = {}, providers = [], projects = [], runs = [], current = null, unfollow = null, form = null;
+const ready = () => providers.filter(p => p.installed && p.loggedIn !== false).map(p => p.id);
+const avatar = (p) => `<span class="avatar" style="background:${COLORS[p] || '#888'}" title="${esc(p)}">${esc((p || '?')[0].toUpperCase())}</span>`;
+const badge = (s) => `<span class="badge ${s === 'fertig' ? 'ok' : s === 'läuft' ? 'warn' : s === 'fehler' || s === 'abgebrochen' ? 'err' : ''}">${esc(s)}</span>`;
+
+// ---------- Liste ----------
+async function loadRuns() {
+  runs = await zentrale.team.list();
+  $('#runs').innerHTML = runs.map(r => `
+    <div class="r ${r.id === current ? 'active' : ''}" data-id="${r.id}">
+      <div class="t">${r.status === 'läuft' ? '<span class="pulse">●</span> ' : ''}${esc(r.title)}</div>
+      <div class="small muted row" style="margin-top:3px">${esc((recipes[r.recipe] || {}).name || r.recipe)} · ${ago(r.created)}</div>
+    </div>`).join('') || '<div class="empty">Noch keine Team-Läufe.</div>';
+}
+$('#runs').onclick = (e) => { const r = e.target.closest('[data-id]'); if (r) { showRun(r.dataset.id); document.body.classList.remove('list'); } };
+
+// ---------- Neues Team ----------
+function defaultsFor(key) {
+  const R = recipes[key], avail = ready(), roles = {};
+  R.roles.forEach((role, i) => {
+    if (role.multi) roles[role.key] = role.prefer.filter(p => avail.includes(p));
+    else roles[role.key] = role.prefer.find(p => avail.includes(p)) || role.prefer[0];
+  });
+  return { recipe: key, task: form ? form.task : '', project: form ? form.project : '', mode: 'edit', roles, options: { ...R.options, steps: key === 'kette' ? [
+    { label: 'Entwurf', provider: avail[0] || 'claude', prompt: '' },
+    { label: 'Verbessern', provider: avail[1] || avail[0] || 'codex', prompt: '' },
+  ] : undefined } };
+}
+
+function showForm(preset) {
+  if (unfollow) { unfollow(); unfollow = null; }
+  current = null; loadRuns();
+  form = preset || form || defaultsFor('bauen');
+  const R = recipes[form.recipe];
+  const provOpts = (sel) => providers.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''} ${p.installed ? '' : 'disabled'}>${esc(p.name)}${p.installed ? (p.loggedIn === false ? ' (nicht angemeldet)' : '') : ' (fehlt)'}</option>`).join('');
+  $('#main').innerHTML = `<div class="page">
+    <div class="row"><button class="btn sm" id="listBtn" title="Läufe">☰</button><h2 style="margin:0">⚭ Neues KI-Team</h2></div>
+    <p class="muted">Wähle, wie die KIs zusammenarbeiten sollen. Jede KI sieht, was die anderen vor ihr geliefert haben.</p>
+    <div class="recipes">${Object.entries(recipes).map(([k, r]) => `<div class="card recipe ${k === form.recipe ? 'sel' : ''}" data-recipe="${k}"><b>${esc(r.name)}</b><div class="small muted">${esc(r.description)}</div></div>`).join('')}</div>
+
+    <h2>Aufgabe</h2>
+    <textarea class="input" id="task" placeholder="${form.recipe === 'bauen' ? 'z. B. Baue eine Login-Seite mit Passwort-Reset' : 'Frage oder Aufgabe …'}">${esc(form.task)}</textarea>
+
+    <div class="row" style="margin-top:12px">
+      <label class="field grow"><span>Projekt${R.needsProject ? ' (Pflicht)' : ' (optional – dann können die KIs die Dateien lesen)'}</span>
+        <select class="input" id="proj"><option value="">— keins —</option>${projects.map(p => `<option ${p === form.project ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label>
+      ${form.recipe === 'bauen' || form.recipe === 'kette' ? `<label class="field grow"><span>Rechte beim Umsetzen</span>
+        <select class="input" id="mode"><option value="edit" ${form.mode === 'edit' ? 'selected' : ''}>✎ Dateien ändern</option><option value="full" ${form.mode === 'full' ? 'selected' : ''}>⚠ alles (auch Befehle/Tests ausführen)</option></select></label>` : ''}
+      ${R.options.rounds ? `<label class="field"><span>Runden</span><input class="input" type="number" id="rounds" min="1" max="6" value="${form.options.rounds}" style="width:90px"></label>` : ''}
+    </div>
+
+    ${R.roles.length ? `<h2>Rollen</h2><div class="roles">${R.roles.map(role => role.multi
+      ? `<div class="card" style="grid-column:1/-1"><div class="small muted" style="margin-bottom:8px">${esc(role.label)}</div>${providers.map(p => `<label class="chk"><input type="checkbox" data-multi="${role.key}" value="${p.id}" ${form.roles[role.key].includes(p.id) ? 'checked' : ''} ${p.installed ? '' : 'disabled'}>${esc(p.name)}</label>`).join('')}</div>`
+      : `<label class="field card" style="margin:0"><span>${esc(role.label)}</span><select class="input" data-role="${role.key}">${provOpts(form.roles[role.key])}</select></label>`).join('')}</div>` : ''}
+
+    ${form.recipe === 'kette' ? `<h2>Schritte</h2><div class="chain" id="chain">${form.options.steps.map((s, i) => `
+      <div class="st" data-i="${i}"><b class="mono" style="padding-top:8px">${i + 1}.</b>
+        <input class="input" data-k="label" value="${esc(s.label)}" placeholder="Name">
+        <select class="input" data-k="provider">${provOpts(s.provider)}</select>
+        <textarea class="input" data-k="prompt" placeholder="${i === 0 ? '{{aufgabe}}' : 'leer = Aufgabe + Ergebnis des vorherigen Schritts'}">${esc(s.prompt)}</textarea>
+        <button class="btn sm danger" data-delstep="${i}" title="Entfernen">✕</button></div>`).join('')}
+      <button class="btn sm" id="addStep">＋ Schritt</button>
+      <div class="muted small" style="margin-top:6px">Platzhalter: <code>{{aufgabe}}</code> · <code>{{vorher}}</code> · <code>{{schritt:1}}</code></div></div>` : ''}
+
+    <div class="row" style="margin-top:20px"><span class="grow"></span><button class="btn primary" id="startBtn">⚭ Team starten</button></div>
+  </div>`;
+
+  const sync = () => {
+    form.task = $('#task').value; form.project = $('#proj').value;
+    if ($('#mode')) form.mode = $('#mode').value;
+    if ($('#rounds')) form.options.rounds = +$('#rounds').value;
+    document.querySelectorAll('[data-role]').forEach(s => form.roles[s.dataset.role] = s.value);
+    const multi = {}; document.querySelectorAll('[data-multi]').forEach(c => { (multi[c.dataset.multi] = multi[c.dataset.multi] || []); if (c.checked) multi[c.dataset.multi].push(c.value); });
+    Object.assign(form.roles, multi);
+    document.querySelectorAll('#chain .st').forEach(st => { const s = form.options.steps[st.dataset.i]; st.querySelectorAll('[data-k]').forEach(el => s[el.dataset.k] = el.value); });
+  };
+  $('#main').oninput = $('#main').onchange = sync;
+  $('#listBtn').onclick = () => document.body.classList.toggle('list');
+  document.querySelectorAll('[data-recipe]').forEach(c => c.onclick = () => { sync(); const keep = { task: form.task, project: form.project }; form = defaultsFor(c.dataset.recipe); Object.assign(form, keep); showForm(form); });
+  if ($('#addStep')) $('#addStep').onclick = () => { sync(); form.options.steps.push({ label: `Schritt ${form.options.steps.length + 1}`, provider: ready()[0] || 'claude', prompt: '' }); showForm(form); };
+  document.querySelectorAll('[data-delstep]').forEach(b => b.onclick = () => { sync(); form.options.steps.splice(+b.dataset.delstep, 1); showForm(form); });
+  $('#startBtn').onclick = async () => {
+    sync();
+    try {
+      const r = await zentrale.team.start({ recipe: form.recipe, task: form.task, project: form.project, mode: form.mode, roles: form.roles, options: form.options });
+      form.task = '';
+      showRun(r.id);
+    } catch (e) { zentrale.notify(e.message, 'err'); }
+  };
+}
+
+// ---------- Lauf anzeigen ----------
+function stepCard(s) {
+  return `<div class="card step ${s.status}" id="step-${s.id}">
+    <div class="head">${avatar(s.provider)}<b>${esc(s.title)}</b><span class="muted small">${esc(s.provider)}${s.mode && s.mode !== 'chat' ? ' · ' + (s.mode === 'full' ? '⚠ alles' : '✎ ändert Dateien') : ''}</span>
+      <span class="grow"></span>${badge(s.status)}<span class="muted small">${s.ended ? ((s.ended - s.started) / 1000).toFixed(0) + ' s' : ''}</span></div>
+    <div class="tools">${(s.tools || []).map(t => `<div>${esc(t.name)} ${esc(t.target)}</div>`).join('')}</div>
+    <div class="out md">${s.output ? renderMarkdown(s.output) : s.status === 'läuft' ? '<span class="muted pulse">denkt nach …</span>' : s.error ? `<span style="color:var(--red)">${esc(s.error)}</span>` : ''}</div>
+    <details class="prompt"><summary>Auftrag an ${esc(s.provider)} anzeigen</summary><pre>${esc(s.prompt)}</pre></details>
+  </div>`;
+}
+
+function renderHeader(run) {
+  const R = recipes[run.recipe] || {};
+  const roles = Object.entries(run.roles || {}).map(([k, v]) => `<span class="small muted">${esc(k)}:</span> ${(Array.isArray(v) ? v : [v]).map(avatar).join('')}`).join(' &nbsp; ');
+  $('#head').innerHTML = `
+    <div class="row"><button class="btn sm" id="listBtn" title="Läufe">☰</button><h2 style="margin:0" class="grow">⚭ ${esc(run.title)}</h2>${badge(run.status)}
+      ${run.status === 'läuft' ? '<button class="btn sm danger" id="stopBtn">■ Stopp</button>' : '<button class="btn sm" id="againBtn">↻ Nochmal</button><button class="btn sm danger" id="delBtn">✕</button>'}</div>
+    <div class="muted small" style="margin:6px 0 10px">${esc(R.name || run.recipe)}${run.project ? ' · Projekt <b>' + esc(run.project) + '</b>' : ''} · ${ago(run.created)}</div>
+    <div class="row">${roles}</div>
+    <details class="card" style="margin-top:12px"><summary class="muted small" style="cursor:pointer">Aufgabe</summary><div style="white-space:pre-wrap;margin-top:8px">${esc(run.task)}</div></details>
+    ${run.error ? `<div class="card" style="border-color:var(--red);margin-top:12px;color:var(--red)">${esc(run.error)}</div>` : ''}`;
+  $('#listBtn').onclick = () => document.body.classList.toggle('list');
+  if ($('#stopBtn')) $('#stopBtn').onclick = () => zentrale.team.stop(run.id);
+  if ($('#delBtn')) $('#delBtn').onclick = async () => { if (!confirm('Lauf löschen?')) return; await zentrale.team.remove(run.id); showForm(); };
+  if ($('#againBtn')) $('#againBtn').onclick = () => showForm({ recipe: run.recipe, task: run.task, project: run.project, mode: run.mode, roles: run.roles, options: run.options });
+}
+
+function renderResult(run) {
+  const el = $('#result');
+  if (!el) return;
+  if (run.status === 'läuft' || !run.result) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="card result"><div class="row"><b style="color:var(--cyan)">★ Ergebnis</b><span class="grow"></span>
+    ${run.project ? `<button class="btn sm" id="toFiles">❐ Projekt öffnen</button><button class="btn sm" id="toTerm">⌨ Terminal (git diff)</button>` : ''}</div>
+    <div class="md" style="margin-top:8px">${renderMarkdown(run.result)}</div></div>`;
+  if ($('#toFiles')) { $('#toFiles').onclick = () => zentrale.open('projekte', { project: run.project }); $('#toTerm').onclick = () => zentrale.open('terminal', { project: run.project, input: 'git status && git diff --stat\r' }); }
+}
+
+function showRun(id) {
+  if (unfollow) unfollow();
+  current = id; form = null;
+  loadRuns();
+  $('#main').innerHTML = `<div class="page"><div id="head"></div><h2>Ablauf</h2><div class="flow" id="flow"></div><div id="result" style="margin-top:12px"></div></div>`;
+  let run = null;
+  const outputs = {};
+  unfollow = zentrale.team.follow(id, {
+    onFull: (r) => {
+      run = r; renderHeader(r);
+      $('#flow').innerHTML = r.steps.map(stepCard).join('') || '<div class="muted pulse">Team startet …</div>';
+      r.steps.forEach(s => outputs[s.id] = s.output);
+      renderResult(r);
+    },
+    onStep: (s) => {
+      if (!run) return;
+      const i = run.steps.findIndex(x => x.id === s.id);
+      if (i < 0) run.steps.push(s); else run.steps[i] = s;
+      outputs[s.id] = s.output;
+      const old = $('#step-' + s.id);
+      const html = stepCard(s);
+      if (old) old.outerHTML = html;
+      else { if (!run.steps.slice(0, -1).length) $('#flow').innerHTML = ''; $('#flow').insertAdjacentHTML('beforeend', html); $('#step-' + s.id).scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+    },
+    onChunk: ({ step, text }) => {
+      outputs[step] = (outputs[step] || '') + text;
+      const el = document.querySelector(`#step-${step} .out`);
+      if (el) { el.innerHTML = renderMarkdown(outputs[step]); el.scrollTop = 1e9; }
+    },
+    onRun: (r) => {
+      run = { ...run, ...r };
+      renderHeader(run); loadRuns();
+      if (r.status !== 'läuft') { if (unfollow) unfollow(); showRun(id); }
+    },
+  });
+}
+
+$('#newBtn').onclick = () => { document.body.classList.remove('list'); showForm(); };
+zentrale.events.on('team.start', loadRuns);
+zentrale.events.on('team.end', loadRuns);
+
+(async () => {
+  const [r, st, pr] = await Promise.all([zentrale.team.recipes(), zentrale.ki.status(), zentrale.projects.list().catch(() => ({ items: [] }))]);
+  recipes = r; providers = st; projects = pr.items.map(p => p.name);
+  await loadRuns();
+  const live = runs.find(x => x.status === 'läuft');
+  live ? showRun(live.id) : showForm();
+  zentrale.onParams((p) => {
+    if (p.run) return showRun(p.run);
+    const f = defaultsFor(p.recipe && recipes[p.recipe] ? p.recipe : 'bauen');
+    if (p.task) f.task = p.task;
+    if (p.project) f.project = p.project;
+    form = f; showForm(f);
+  });
+})();
+</script>
+</body></html>

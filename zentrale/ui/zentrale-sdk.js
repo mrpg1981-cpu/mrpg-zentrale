@@ -120,6 +120,24 @@
       socketUrl: (id) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/terminal/${id}`,
     },
 
+    // KI-Team: mehrere Modelle arbeiten zusammen
+    team: {
+      recipes: () => api('GET', '/api/team/recipes'),
+      list: () => api('GET', '/api/team'),
+      // { recipe: 'bauen'|'diskussion'|'zweitmeinung'|'kette', task, roles, project, mode, options }
+      start: (opts) => api('POST', '/api/team', opts),
+      stop: (id) => api('POST', `/api/team/${id}/stop`),
+      remove: (id) => api('DELETE', `/api/team/${id}`),
+      // onFull(run), onStep(step), onChunk({step,text}), onRun(summary)
+      follow(id, { onFull, onStep, onChunk, onRun } = {}) {
+        const ctrl = new AbortController();
+        fetch(`/api/team/${id}/stream`, { signal: ctrl.signal })
+          .then((res) => readSSE(res, { full: (r) => onFull && onFull(r), step: (s) => onStep && onStep(s), chunk: (c) => onChunk && onChunk(c), run: (r) => onRun && onRun(r) }))
+          .catch(() => {});
+        return () => ctrl.abort();
+      },
+    },
+
     projects: {
       list: () => api('GET', '/api/projects'),
       create: (name, clone) => api('POST', '/api/projects', { name, clone }),

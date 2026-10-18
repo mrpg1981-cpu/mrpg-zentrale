@@ -76,6 +76,7 @@ function select(name, scroll = true) {
       <button class="btn" data-act="terminal">⌨ Terminal hier</button>
       <button class="btn" data-act="files">❐ Dateien</button>
       <button class="btn primary" data-act="agent">✦ KI-Agent</button>
+      <button class="btn primary" data-act="team">⚭ KI-Team</button>
       <button class="btn" data-act="notes">✎ Notizen</button>
     </div>
 
@@ -120,6 +121,7 @@ $('#detail').onclick = (e) => {
   if (act === 'terminal') zentrale.open('terminal', { project: current });
   if (act === 'files') zentrale.open('dateien', { path: current });
   if (act === 'agent') zentrale.open('ki-chat', { project: current, mode: 'edit' });
+  if (act === 'team') zentrale.open('ki-team', { project: current, recipe: 'bauen' });
   if (act === 'notes') zentrale.open('notizen', { project: current });
 };
 $('#list').onclick = (e) => { const i = e.target.closest('[data-name]'); if (i) select(i.dataset.name); };
@@ -136,7 +138,6 @@ $('#dlg').onclose = async () => {
   } catch (e) { zentrale.notify(e.message, 'err'); }
 };
 zentrale.onParams((p) => { if (p.project) { current = p.project; load(); } });
-zentrale.events.on('fs.changed', () => {});
 load();
 </script>
 </body></html>

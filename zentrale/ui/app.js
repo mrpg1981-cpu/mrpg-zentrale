@@ -93,6 +93,10 @@
       const ok = payload.status === 'fertig';
       if (payload.status !== 'gestoppt') toast(`${ok ? '✓' : '✕'} ${payload.name} ${ok ? 'fertig' : `beendet (Code ${payload.code})`}`, ok ? 'ok' : 'err', () => openModule('prozesse', { id: payload.id }));
     }
+    if (m.type === 'team.end') {
+      const ok = payload.status === 'fertig';
+      toast(`⚭ KI-Team ${ok ? 'fertig' : payload.status}: ${payload.title}`, ok ? 'ok' : 'err', () => openModule('ki-team', { run: payload.id }));
+    }
     if (m.type === 'settings.changed') settings = payload;
     if (active === 'home' && /^proc\./.test(m.type)) refreshProcs();
   });
@@ -203,6 +207,7 @@
     ...projects.map((p) => ({ label: `▣ Projekt: ${p.name}`, run: () => openModule('projekte', { project: p.name }) })),
     ...projects.map((p) => ({ label: `⌨ Terminal in ${p.name}`, run: () => openModule('terminal', { project: p.name }) })),
     ...projects.map((p) => ({ label: `✦ KI-Agent in ${p.name}`, run: () => openModule('ki-chat', { project: p.name, mode: 'edit' }) })),
+    ...projects.map((p) => ({ label: `⚭ KI-Team in ${p.name}`, run: () => openModule('ki-team', { project: p.name, recipe: 'bauen' }) })),
     ...[...open.keys()].map((id) => ({ label: `✕ ${id} schließen`, run: () => closeModule(id) })),
     { label: '⏻ Abmelden', run: () => $('#logoutBtn').click() },
   ];

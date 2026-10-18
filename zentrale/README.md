@@ -28,7 +28,8 @@ Danach http://localhost:7777 öffnen. Für Zugriff aus dem LAN den Port in `dock
 | | **Terminal** | Echte Shell (xterm + node-pty), mehrere Sitzungen, bleiben beim Neuladen erhalten |
 | | **Prozesse** | Dev-Server und Builds starten/stoppen, Live-Log, Meldung, wenn ein Prozess fertig ist |
 | | **Notizen** | Notizen und Aufgaben, allgemein oder pro Projekt |
-| KI | **KI-Chat** | Chat oder **Agent im Projekt** (Dateien ändern / alles), mehrere Chats, Vorlagen |
+| KI | **KI-Team** | Mehrere KIs arbeiten zusammen, siehe unten |
+| | **KI-Chat** | Chat oder **Agent im Projekt** (Dateien ändern / alles), mehrere Chats, Vorlagen |
 | | **KI-Vergleich** | Eine Frage gleichzeitig an alle Modelle |
 | | **Prompts** | Vorlagen-Bibliothek mit dem Platzhalter `{{eingabe}}` |
 | | **KI-Konten** | Installieren, Anmelden, Abmelden und Nutzungsstatistik |
@@ -55,6 +56,18 @@ Alternativ über die Kommandozeile: `./start.sh login claude`
 - 💬 **Nur Chat:** Die KI antwortet nur.
 - ✎ **Dateien ändern:** Die KI darf im gewählten Projekt Dateien bearbeiten.
 - ⚠ **Alles:** Die KI darf zusätzlich beliebige Befehle ausführen. Nur nutzen, wenn du ihr vertraust.
+
+## KI-Team: die KIs arbeiten zusammen
+
+| Rezept | Ablauf |
+|---|---|
+| **Planen → Bauen → Prüfen** | Der Planer (z. B. Claude) liest das Projekt und schreibt einen Plan. Der Umsetzer (z. B. Codex) ändert die Dateien. Der Prüfer (z. B. Gemini) bekommt den `git diff` und antwortet mit `FREIGABE` oder einer Mängelliste. Mängel gehen zurück an den Umsetzer, bis zur Freigabe oder bis die Rundenzahl erreicht ist. |
+| **Diskussion** | Alle Modelle antworten gleichzeitig. In der nächsten Runde lesen sie die Antworten der anderen und verbessern ihre eigene. Ein Moderator fasst zusammen und entscheidet. |
+| **Zweitmeinung** | Autor → Kritiker → Autor überarbeitet |
+| **Eigene Kette** | Beliebige Schritte mit `{{aufgabe}}`, `{{vorher}}` und `{{schritt:N}}` |
+
+Teams laufen auf dem Server weiter, auch wenn der Browser zu ist. Jeder Schritt ist live zu sehen, inklusive der Dateien, die die KI bearbeitet, und des genauen Auftrags an jedes Modell.
+Aus eigenen Modulen startest du ein Team mit `zentrale.team.start({ recipe, task, roles, project })`.
 
 ## Ordner
 ```
