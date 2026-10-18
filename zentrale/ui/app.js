@@ -93,7 +93,8 @@
       const ok = payload.status === 'fertig';
       if (payload.status !== 'gestoppt') toast(`${ok ? '✓' : '✕'} ${payload.name} ${ok ? 'fertig' : `beendet (Code ${payload.code})`}`, ok ? 'ok' : 'err', () => openModule('prozesse', { id: payload.id }));
     }
-    if (m.type === 'team.end') {
+    // kurze Chef-Antworten aus dem KI-Chat nicht extra melden
+    if (m.type === 'team.end' && !(payload.recipe === 'chef' && payload.stepCount <= 2)) {
       const ok = payload.status === 'fertig';
       toast(`⚭ KI-Team ${ok ? 'fertig' : payload.status}: ${payload.title}`, ok ? 'ok' : 'err', () => openModule('ki-team', { run: payload.id }));
     }

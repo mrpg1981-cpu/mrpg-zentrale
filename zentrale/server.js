@@ -56,7 +56,7 @@ function emit(type, payload, from = 'zentrale') {
 }
 const procs = require('./lib/procs')({ runEnv, emit });
 const terminals = require('./lib/terminal')({ settings, runEnv });
-const team = require('./lib/team')({ dataDir: DIRS.data, ki, emit, resolveProject: (rel) => files.resolve(rel) });
+const team = require('./lib/team')({ dataDir: DIRS.data, ki, emit, runEnv, resolveProject: (rel) => files.resolve(rel) });
 
 // ---------- Module: core/ (eingebaut) und modules/ (deine Apps) ----------
 function scan(dir, core) {

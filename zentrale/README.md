@@ -57,17 +57,29 @@ Alternativ über die Kommandozeile: `./start.sh login claude`
 - ✎ **Dateien ändern:** Die KI darf im gewählten Projekt Dateien bearbeiten.
 - ⚠ **Alles:** Die KI darf zusätzlich beliebige Befehle ausführen. Nur nutzen, wenn du ihr vertraust.
 
-## KI-Team: die KIs arbeiten zusammen
+## 🧭 Chef-KI und KI-Team: die KIs arbeiten zusammen
 
+**Standard ist die Chef-KI**, im KI-Chat genauso wie im KI-Team. Sie bewertet jede Aufgabe und entscheidet möglichst sparsam:
+
+| Entscheidung | Wann | Anfragen |
+|---|---|---|
+| **selbst** | Fragen, Erklärungen, kleine bis mittlere Aufgaben | 1 (die Antwort steckt schon in der Entscheidung) |
+| **weiterleiten** | Ein anderes Modell ist klar besser oder günstiger, z. B. Codex für eine klar umrissene Code-Änderung oder Ollama für Einfaches ohne Abo-Verbrauch | 2 |
+| **Team** | Große oder riskante Änderungen (Bauen) oder wichtige Entscheidungen (Zweitmeinung) | 3–6 |
+
+Die Entscheidung samt Begründung steht in jeder Antwort.
+
+**Rezepte im KI-Team** (auch einzeln wählbar):
 | Rezept | Ablauf |
 |---|---|
-| **Planen → Bauen → Prüfen** | Der Planer (z. B. Claude) liest das Projekt und schreibt einen Plan. Der Umsetzer (z. B. Codex) ändert die Dateien. Der Prüfer (z. B. Gemini) bekommt den `git diff` und antwortet mit `FREIGABE` oder einer Mängelliste. Mängel gehen zurück an den Umsetzer, bis zur Freigabe oder bis die Rundenzahl erreicht ist. |
-| **Diskussion** | Alle Modelle antworten gleichzeitig. In der nächsten Runde lesen sie die Antworten der anderen und verbessern ihre eigene. Ein Moderator fasst zusammen und entscheidet. |
+| **Planen → Bauen → Prüfen** | Planer → Umsetzer → **Tests** (kostenlos) → Prüfer mit `git diff`. Schlagen die Tests fehl, geht die Fehlermeldung direkt an den Umsetzer zurück, ohne Prüfer-Anfrage. Standard: 1 Nachbesserung |
 | **Zweitmeinung** | Autor → Kritiker → Autor überarbeitet |
+| **Diskussion** | Alle antworten, dann entscheidet ein Moderator. Standard: 1 Runde |
 | **Eigene Kette** | Beliebige Schritte mit `{{aufgabe}}`, `{{vorher}}` und `{{schritt:N}}` |
 
-Teams laufen auf dem Server weiter, auch wenn der Browser zu ist. Jeder Schritt ist live zu sehen, inklusive der Dateien, die die KI bearbeitet, und des genauen Auftrags an jedes Modell.
-Aus eigenen Modulen startest du ein Team mit `zentrale.team.start({ recipe, task, roles, project })`.
+Vor dem Start zeigt die Zentrale an, **wie viele Anfragen ungefähr** anfallen. Teams laufen auf dem Server weiter, auch wenn der Browser zu ist.
+Tests werden automatisch erkannt: `npm test`, `pytest`, `cargo test` oder `go test`.
+Aus eigenen Modulen: `zentrale.team.start({ recipe: 'chef', task, roles: { chef: 'claude' }, project, mode })`.
 
 ## Ordner
 ```

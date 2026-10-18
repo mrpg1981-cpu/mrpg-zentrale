@@ -57,13 +57,13 @@
 const $ = (s) => document.querySelector(s);
 const { esc } = zentrale.util;
 let state = { chats: [], current: null };
-let providers = [], ctrl = null;
+let providers = [], ctrl = null, chefModel = 'claude';
 
 const chat = () => state.chats.find(c => c.id === state.current);
 const save = () => zentrale.store.set({ chats: state.chats.slice(-50), current: state.current });
 
 function newChat(opts = {}) {
-  const s = { provider: $('#prov').value, model: $('#model').value.trim(), mode: 'chat', project: '' };
+  const s = { provider: 'chef', model: '', mode: 'chat', project: '' }; // neue Chats laufen über die Chef-KI
   const c = { id: Date.now().toString(36), title: 'Neuer Chat', created: Date.now(), messages: [], session: null, ...s, ...opts };
   state.chats.push(c); state.current = c.id;
   render(); save();
@@ -138,6 +138,53 @@ function buildPrompt(c, text) {
   return 'Bisheriger Gesprächsverlauf:\n' + hist.map(m => `${m.role === 'user' ? 'Nutzer' : 'Assistent'}: ${m.text}`).join('\n\n') + `\n\nNeue Nachricht des Nutzers:\n${text}`;
 }
 
+// Über die Chef-KI: sie entscheidet selbst, weiterleiten oder Team
+function askViaChef(c, prompt, el, am, signal) {
+  return new Promise(async (resolve, reject) => {
+    let run;
+    try {
+      run = await zentrale.team.start({ recipe: 'chef', task: prompt, project: c.project || undefined, mode: c.mode, roles: { chef: chefModel }, title: prompt.split('\n').pop().slice(0, 70) });
+    } catch (e) { return reject(e); }
+    const outs = {};
+    let current = null;
+    signal.addEventListener('abort', () => { zentrale.team.stop(run.id); });
+    const off = zentrale.team.follow(run.id, {
+      onStep: (s) => {
+        if (s.title === 'Chef-Entscheidung') return;
+        if (s.id !== current && s.status === 'läuft') {
+          current = s.id;
+          addTool(el, { name: `${s.provider}`, input: { path: s.title } });
+          am.tools.push({ name: s.provider, input: { path: s.title } });
+        }
+      },
+      onChunk: ({ step, text }) => {
+        outs[step] = (outs[step] || '') + text;
+        if (step === current) { am.text = outs[step]; setBody(el, am); $('#log').scrollTop = 1e9; }
+      },
+      // Endstand beim Verbinden – der Lauf kann schon fertig sein (z. B. Chef antwortet sofort selbst)
+      onFull: (r) => { if (r.status !== 'läuft' || r.decision) handleRun({ ...r, stepCount: r.steps.length }); },
+      onRun: (r) => handleRun(r),
+    });
+    let finished = false;
+    function handleRun(r) {
+        if (finished) return;
+        if (r.decision && !am.decision) {
+          am.decision = r.decision;
+          const d = r.decision;
+          am.who = `🧭 Chef (${chefModel}) → ` + (d.entscheidung === 'weiterleiten' ? d.modell : d.entscheidung === 'team' ? `Team: ${d.rezept}` : 'selbst');
+          el.querySelector('.who span').textContent = am.who;
+          if (d.begruendung) { el.querySelector('.meta').textContent = d.begruendung; }
+        }
+        if (r.status === 'läuft') return;
+        finished = true;
+        setTimeout(() => off(), 0);
+        if (r.status === 'fertig') resolve({ text: r.result || am.text, runId: r.id, steps: r.stepCount });
+        else if (r.status === 'abgebrochen') reject(Object.assign(new Error('abgebrochen'), { name: 'AbortError' }));
+        else reject(new Error(r.error || 'Chef-Lauf fehlgeschlagen'));
+    }
+  });
+}
+
 async function send() {
   if (ctrl) { ctrl.abort(); return; }
   const text = $('#q').value.trim(); if (!text) return;
@@ -154,6 +201,16 @@ async function send() {
   const el = msgEl(am); $('#log').appendChild(el); $('#log').scrollTop = 1e9;
   ctrl = new AbortController(); $('#send').textContent = '■ Stopp';
   try {
+    if (c.provider === 'chef') {
+      const t0 = Date.now();
+      const r = await askViaChef(c, prompt, el, am, ctrl.signal);
+      am.text = r.text; setBody(el, am);
+      am.meta = `${((Date.now() - t0) / 1000).toFixed(1)} s · ${r.steps} Schritt(e)`;
+      el.querySelector('.meta').textContent = am.meta + (am.decision && am.decision.begruendung ? ' · ' + am.decision.begruendung : '');
+      if (r.steps > 1) { const a = document.createElement('a'); a.href = '#'; a.textContent = ' → Ablauf im KI-Team ansehen'; a.className = 'small'; a.onclick = (e) => { e.preventDefault(); zentrale.open('ki-team', { run: r.runId }); }; el.querySelector('.who').appendChild(a); }
+      zentrale.events.emit('ki.answer', { provider: 'chef', project: c.project, mode: c.mode });
+      return;
+    }
     const r = await zentrale.ki.ask({
       provider: c.provider, model: c.model, mode: c.mode, project: c.project || undefined, session: c.session || undefined,
       prompt, signal: ctrl.signal,
@@ -203,8 +260,9 @@ zentrale.events.on('store.changed', (s) => { if (s.id === 'prompts') loadPrompts
     zentrale.ki.status(), zentrale.store.get(), zentrale.settings.get(), zentrale.projects.list().catch(() => ({ items: [] })),
   ]);
   providers = st;
-  $('#prov').innerHTML = st.map(p => `<option value="${p.id}" ${p.installed ? '' : 'disabled'}>${esc(p.name)}${p.installed ? (p.loggedIn === false ? ' (nicht angemeldet)' : '') : ' (fehlt)'}</option>`).join('');
-  $('#prov').value = settings.defaultProvider || 'claude';
+  chefModel = (st.find(p => p.id === (settings.defaultProvider || 'claude') && p.installed && p.loggedIn !== false) || st.find(p => p.installed && p.loggedIn !== false && p.id !== 'ollama') || { id: 'claude' }).id;
+  $('#prov').innerHTML = `<option value="chef">🧭 Chef-KI (entscheidet selbst)</option>` + st.map(p => `<option value="${p.id}" ${p.installed ? '' : 'disabled'}>${esc(p.name)}${p.installed ? (p.loggedIn === false ? ' (nicht angemeldet)' : '') : ' (fehlt)'}</option>`).join('');
+  $('#prov').value = 'chef';
   $('#model').value = settings.defaultModel || '';
   $('#proj').innerHTML += projects.items.map(p => `<option>${esc(p.name)}</option>`).join('');
   state = { chats: saved.chats || [], current: saved.current || null };

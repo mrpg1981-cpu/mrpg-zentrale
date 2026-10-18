@@ -51,7 +51,7 @@
 <script>
 const $ = (s) => document.querySelector(s);
 const { esc, ago } = zentrale.util;
-const COLORS = { claude: '#d97757', codex: '#10a37f', gemini: '#4c8df6', ollama: '#b9bec7' };
+const COLORS = { claude: '#d97757', codex: '#10a37f', gemini: '#4c8df6', ollama: '#b9bec7', tests: '#f5d76e' };
 let recipes = {}, providers = [], projects = [], runs = [], current = null, unfollow = null, form = null;
 const ready = () => providers.filter(p => p.installed && p.loggedIn !== false).map(p => p.id);
 const avatar = (p) => `<span class="avatar" style="background:${COLORS[p] || '#888'}" title="${esc(p)}">${esc((p || '?')[0].toUpperCase())}</span>`;
@@ -67,6 +67,19 @@ async function loadRuns() {
     </div>`).join('') || '<div class="empty">Noch keine Team-Läufe.</div>';
 }
 $('#runs').onclick = (e) => { const r = e.target.closest('[data-id]'); if (r) { showRun(r.dataset.id); document.body.classList.remove('list'); } };
+
+// ---------- Geschätzte KI-Anfragen (Abo-Limits!) ----------
+function estimate(f) {
+  const o = f.options || {};
+  switch (f.recipe) {
+    case 'chef': return { text: '1 Anfrage – mehr nur, wenn die Chef-KI ein Team für nötig hält (max. ~5)', level: 1 };
+    case 'bauen': { const r = Math.max(0, +o.rounds || 0); return { text: `3 Anfragen (Plan, Umsetzung, Prüfung)${r ? `, bis zu ${3 + 2 * r} mit ${r} Nachbesserung(en)` : ''}${o.tests !== false ? ' · Tests kosten nichts' : ''}`, level: r ? 3 : 2 }; }
+    case 'zweitmeinung': return { text: '3 Anfragen', level: 2 };
+    case 'diskussion': { const n = (f.roles.teilnehmer || []).length, r = +o.rounds || 1; return { text: `${n * r + 1} Anfragen (${n} Teilnehmer × ${r} Runde${r > 1 ? 'n' : ''} + Moderator)`, level: n * r + 1 > 4 ? 3 : 2 }; }
+    case 'kette': return { text: `${(o.steps || []).length} Anfragen`, level: (o.steps || []).length > 3 ? 3 : 2 };
+  }
+  return { text: '', level: 1 };
+}
 
 // ---------- Neues Team ----------
 function defaultsFor(key) {
@@ -84,7 +97,7 @@ function defaultsFor(key) {
 function showForm(preset) {
   if (unfollow) { unfollow(); unfollow = null; }
   current = null; loadRuns();
-  form = preset || form || defaultsFor('bauen');
+  form = preset || form || defaultsFor('chef');
   const R = recipes[form.recipe];
   const provOpts = (sel) => providers.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''} ${p.installed ? '' : 'disabled'}>${esc(p.name)}${p.installed ? (p.loggedIn === false ? ' (nicht angemeldet)' : '') : ' (fehlt)'}</option>`).join('');
   $('#main').innerHTML = `<div class="page">
@@ -100,7 +113,11 @@ function showForm(preset) {
         <select class="input" id="proj"><option value="">— keins —</option>${projects.map(p => `<option ${p === form.project ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label>
       ${form.recipe === 'bauen' || form.recipe === 'kette' ? `<label class="field grow"><span>Rechte beim Umsetzen</span>
         <select class="input" id="mode"><option value="edit" ${form.mode === 'edit' ? 'selected' : ''}>✎ Dateien ändern</option><option value="full" ${form.mode === 'full' ? 'selected' : ''}>⚠ alles (auch Befehle/Tests ausführen)</option></select></label>` : ''}
-      ${R.options.rounds ? `<label class="field"><span>Runden</span><input class="input" type="number" id="rounds" min="1" max="6" value="${form.options.rounds}" style="width:90px"></label>` : ''}
+      ${form.recipe === 'bauen' ? `<label class="field"><span>Nachbesserungen</span><input class="input" type="number" id="rounds" min="0" max="3" value="${form.options.rounds}" style="width:110px"></label>
+        <label class="field"><span>Tests vor der Prüfung</span><label class="chk" style="margin:0;padding:8px 10px"><input type="checkbox" id="tests" ${form.options.tests !== false ? 'checked' : ''}> automatisch</label></label>` : ''}
+      ${form.recipe === 'diskussion' ? `<label class="field"><span>Runden</span><input class="input" type="number" id="rounds" min="1" max="3" value="${form.options.rounds}" style="width:90px"></label>` : ''}
+      ${form.recipe === 'chef' ? `<label class="field grow"><span>Darf die KI Dateien ändern?</span>
+        <select class="input" id="mode"><option value="chat" ${form.mode === 'chat' ? 'selected' : ''}>💬 Nein, nur antworten</option><option value="edit" ${form.mode === 'edit' ? 'selected' : ''}>✎ Ja, Dateien ändern</option><option value="full" ${form.mode === 'full' ? 'selected' : ''}>⚠ alles (auch Befehle/Tests)</option></select></label>` : ''}
     </div>
 
     ${R.roles.length ? `<h2>Rollen</h2><div class="roles">${R.roles.map(role => role.multi
@@ -116,13 +133,16 @@ function showForm(preset) {
       <button class="btn sm" id="addStep">＋ Schritt</button>
       <div class="muted small" style="margin-top:6px">Platzhalter: <code>{{aufgabe}}</code> · <code>{{vorher}}</code> · <code>{{schritt:1}}</code></div></div>` : ''}
 
-    <div class="row" style="margin-top:20px"><span class="grow"></span><button class="btn primary" id="startBtn">⚭ Team starten</button></div>
+    <div class="row" style="margin-top:20px"><span class="badge" id="est"></span><span class="grow"></span><button class="btn primary" id="startBtn">${form.recipe === 'chef' ? '🧭 An die Chef-KI geben' : '⚭ Team starten'}</button></div>
   </div>`;
 
   const sync = () => {
     form.task = $('#task').value; form.project = $('#proj').value;
     if ($('#mode')) form.mode = $('#mode').value;
     if ($('#rounds')) form.options.rounds = +$('#rounds').value;
+    if ($('#tests')) form.options.tests = $('#tests').checked;
+    const est = estimate(form);
+    if ($('#est')) { $('#est').textContent = '≈ ' + est.text; $('#est').className = 'badge ' + (est.level >= 3 ? 'warn' : est.level === 1 ? 'ok' : 'accent'); }
     document.querySelectorAll('[data-role]').forEach(s => form.roles[s.dataset.role] = s.value);
     const multi = {}; document.querySelectorAll('[data-multi]').forEach(c => { (multi[c.dataset.multi] = multi[c.dataset.multi] || []); if (c.checked) multi[c.dataset.multi].push(c.value); });
     Object.assign(form.roles, multi);
@@ -133,6 +153,7 @@ function showForm(preset) {
   document.querySelectorAll('[data-recipe]').forEach(c => c.onclick = () => { sync(); const keep = { task: form.task, project: form.project }; form = defaultsFor(c.dataset.recipe); Object.assign(form, keep); showForm(form); });
   if ($('#addStep')) $('#addStep').onclick = () => { sync(); form.options.steps.push({ label: `Schritt ${form.options.steps.length + 1}`, provider: ready()[0] || 'claude', prompt: '' }); showForm(form); };
   document.querySelectorAll('[data-delstep]').forEach(b => b.onclick = () => { sync(); form.options.steps.splice(+b.dataset.delstep, 1); showForm(form); });
+  sync();
   $('#startBtn').onclick = async () => {
     sync();
     try {
@@ -144,12 +165,22 @@ function showForm(preset) {
 }
 
 // ---------- Lauf anzeigen ----------
+const DEC = { selbst: 'erledigt es selbst', weiterleiten: 'leitet weiter', team: 'setzt ein Team ein' };
+function decisionHtml(d) {
+  if (!d) return '';
+  const target = d.entscheidung === 'weiterleiten' ? ` an ${avatar(d.modell)} <b>${esc(d.modell)}</b>` : d.entscheidung === 'team' ? `: <b>${esc((recipes[d.rezept] || {}).name || d.rezept)}</b>` : '';
+  const roles = d.rollen ? ' ' + Object.entries(d.rollen).map(([k, v]) => `<span class="small muted">${esc(k)}</span> ${(Array.isArray(v) ? v : [v]).map(avatar).join('')}`).join(' ') : '';
+  return `<div class="row">🧭 <b>Chef ${DEC[d.entscheidung] || esc(d.entscheidung)}</b>${target}${roles}</div>${d.begruendung ? `<div class="muted small" style="margin-top:6px">${esc(d.begruendung)}</div>` : ''}`;
+}
+function parseDec(t) { const m = String(t || '').match(/\{[\s\S]*\}/g) || []; for (const b of m.reverse()) { try { const d = JSON.parse(b); if (d.entscheidung) return d; } catch {} } return null; }
+
 function stepCard(s) {
+  const dec = s.title === 'Chef-Entscheidung' && s.status === 'fertig' ? parseDec(s.output) : null;
   return `<div class="card step ${s.status}" id="step-${s.id}">
     <div class="head">${avatar(s.provider)}<b>${esc(s.title)}</b><span class="muted small">${esc(s.provider)}${s.mode && s.mode !== 'chat' ? ' · ' + (s.mode === 'full' ? '⚠ alles' : '✎ ändert Dateien') : ''}</span>
       <span class="grow"></span>${badge(s.status)}<span class="muted small">${s.ended ? ((s.ended - s.started) / 1000).toFixed(0) + ' s' : ''}</span></div>
     <div class="tools">${(s.tools || []).map(t => `<div>${esc(t.name)} ${esc(t.target)}</div>`).join('')}</div>
-    <div class="out md">${s.output ? renderMarkdown(s.output) : s.status === 'läuft' ? '<span class="muted pulse">denkt nach …</span>' : s.error ? `<span style="color:var(--red)">${esc(s.error)}</span>` : ''}</div>
+    <div class="out md">${dec ? decisionHtml(dec) : s.output ? renderMarkdown(s.output) : s.status === 'läuft' ? '<span class="muted pulse">denkt nach …</span>' : s.error ? `<span style="color:var(--red)">${esc(s.error)}</span>` : ''}</div>
     <details class="prompt"><summary>Auftrag an ${esc(s.provider)} anzeigen</summary><pre>${esc(s.prompt)}</pre></details>
   </div>`;
 }
@@ -163,6 +194,7 @@ function renderHeader(run) {
     <div class="muted small" style="margin:6px 0 10px">${esc(R.name || run.recipe)}${run.project ? ' · Projekt <b>' + esc(run.project) + '</b>' : ''} · ${ago(run.created)}</div>
     <div class="row">${roles}</div>
     <details class="card" style="margin-top:12px"><summary class="muted small" style="cursor:pointer">Aufgabe</summary><div style="white-space:pre-wrap;margin-top:8px">${esc(run.task)}</div></details>
+    ${run.decision ? `<div class="card" style="margin-top:12px;border-color:var(--cyan)">${decisionHtml(run.decision)}</div>` : ''}
     ${run.error ? `<div class="card" style="border-color:var(--red);margin-top:12px;color:var(--red)">${esc(run.error)}</div>` : ''}`;
   $('#listBtn').onclick = () => document.body.classList.toggle('list');
   if ($('#stopBtn')) $('#stopBtn').onclick = () => zentrale.team.stop(run.id);
@@ -229,7 +261,7 @@ zentrale.events.on('team.end', loadRuns);
   live ? showRun(live.id) : showForm();
   zentrale.onParams((p) => {
     if (p.run) return showRun(p.run);
-    const f = defaultsFor(p.recipe && recipes[p.recipe] ? p.recipe : 'bauen');
+    const f = defaultsFor(p.recipe && recipes[p.recipe] ? p.recipe : 'chef');
     if (p.task) f.task = p.task;
     if (p.project) f.project = p.project;
     form = f; showForm(f);
