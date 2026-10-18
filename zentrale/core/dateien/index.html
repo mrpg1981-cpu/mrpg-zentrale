@@ -40,6 +40,7 @@
       <button class="btn sm" id="back" style="display:none">←</button>
       <b class="mono" id="fname">Keine Datei geöffnet</b><span class="dirty" id="dirty"></span>
       <span class="grow"></span>
+      <button class="btn sm" id="toCentral" hidden>〄 In Central öffnen</button>
       <button class="btn sm" id="askKi" disabled>✦ KI fragen</button>
       <button class="btn sm primary" id="save" disabled>Speichern <span class="muted">Strg+S</span></button>
     </div>
@@ -76,6 +77,7 @@ async function openFile(path) {
   $('#fname').textContent = path;
   document.body.classList.add('editing');
   $('#askKi').disabled = false;
+  $('#toCentral').hidden = !/\.html?$/i.test(path);
   if (IMG.test(path)) {
     $('#code').style.display = 'none'; $('#preview').style.display = 'grid';
     $('#preview').innerHTML = `<img src="${zentrale.fs.rawUrl(path)}" alt="">`;
@@ -144,6 +146,7 @@ $('#newDir').onclick = async () => {
 $('#back').onclick = () => document.body.classList.remove('editing');
 if (matchMedia('(max-width: 720px)').matches) $('#back').style.display = '';
 $('#save').onclick = save;
+$('#toCentral').onclick = () => zentrale.open('central', { file });
 $('#askKi').onclick = () => {
   const sel = $('#code').value.substring($('#code').selectionStart, $('#code').selectionEnd);
   const content = sel || $('#code').value;

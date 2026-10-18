@@ -4,4 +4,5 @@
 
 - `zentrale/`: Dashboard (Node, portabel oder Docker)
 - `zentrale/modules/commander/`: MRPG Commander (SFTP/FTP), läuft als Modul oder eigenständig
-- `mrpg-central.html`, `fraglich-test.html`: ältere Einzel-Apps, werden nach und nach Module
+- `zentrale/modules/central/`: MRPG Central (HTML-Live-Editor), läuft als Modul oder eigenständig
+- `fraglich-test.html`: ältere Einzel-App, wird später ein Modul
