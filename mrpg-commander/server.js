@@ -129,14 +129,30 @@ const routes = {
   },
 };
 
-http.createServer(async (req, res) => {
+const server = http.createServer(async (req, res) => {
   const url = req.url.split('?')[0];
   if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return fs.createReadStream(path.join(__dirname, 'index.html')).pipe(res);
+    // Portable-Build: HTML ist eingebettet (__HTML__), sonst von Platte
+    return res.end(typeof __HTML__ !== 'undefined' ? __HTML__ : fs.readFileSync(path.join(__dirname, 'index.html')));
   }
   const h = routes[`${req.method} ${url}`];
   if (!h) return send(res, 404, { error: 'Unbekannt' });
   try { send(res, 200, await h(await body(req))); }
   catch (e) { send(res, 500, { error: e.message }); }
-}).listen(PORT, '127.0.0.1', () => console.log(`MRPG Commander laeuft: http://127.0.0.1:${PORT}`));
+});
+const url = `http://127.0.0.1:${PORT}`;
+const openBrowser = () => {
+  if (process.env.NO_BROWSER) return;
+  const cmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open ${url}` : `xdg-open ${url}`;
+  require('child_process').exec(cmd, () => {});
+};
+server.on('error', e => {
+  if (e.code !== 'EADDRINUSE') throw e;
+  console.log(`MRPG Commander laeuft schon – oeffne ${url}`);
+  openBrowser(); setTimeout(() => process.exit(0), 1500);
+});
+server.listen(PORT, '127.0.0.1', () => {
+  console.log(`MRPG Commander laeuft: ${url}  (Fenster offen lassen, Strg+C beendet)`);
+  openBrowser();
+});

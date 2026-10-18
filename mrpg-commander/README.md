@@ -2,7 +2,14 @@
 
 Zwei-Fenster-Dateimanager im Norton-Commander-Stil (MRPG Design) zum Hoch- und Herunterladen per **SFTP, FTP oder FTPS**.
 
-## Start
+## Portable (ohne Installation)
+- **Windows:** `MRPG-Commander.exe` doppelklicken – fertig. Browser öffnet sich automatisch.
+- **Linux:** `./MRPG-Commander-linux`
+- **Überall mit Node:** `node dist/mrpg-commander.js` (eine einzige Datei, alles drin)
+
+Selbst bauen: `npm install && npm run build` (für EXE/Linux-Binary die Node-Programme als `build-bin/node.exe` bzw. `build-bin/node-linux` ablegen).
+
+## Start (Entwicklung)
 ```bash
 cd mrpg-commander
 npm install

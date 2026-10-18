@@ -4,7 +4,8 @@
   "description": "Norton-Commander-Style FTP/SFTP Client im MRPG Design",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "node build.js"
   },
   "keywords": [],
   "author": "",
@@ -12,5 +13,9 @@
   "dependencies": {
     "basic-ftp": "^6.2.3",
     "ssh2-sftp-client": "^12.1.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "postject": "^1.0.0-alpha.6"
   }
 }
