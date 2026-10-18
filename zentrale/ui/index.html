@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MRPG Zentrale</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body { height: 100vh; display: grid; grid-template-rows: 52px 1fr 28px; overflow: hidden; }
+  .top { display: flex; gap: 10px; align-items: center; padding: 8px 14px; background: var(--bg-deep); border-bottom: 1px solid var(--line); }
+  .brand { color: var(--cyan); font: bold 16px var(--mono); cursor: pointer; }
+  .spacer { flex: 1; }
+  main { min-height: 0; display: grid; grid-template-columns: 220px 1fr; }
+  .side { background: var(--bg-deep); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .head { padding: 12px; color: var(--muted); border-bottom: 1px solid var(--line); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+  .nav { padding: 8px; overflow: auto; }
+  .nav button { width: 100%; display: flex; gap: 8px; padding: 8px; border: 0; background: transparent; color: var(--muted); text-align: left; font-family: var(--mono); cursor: pointer; border-radius: var(--radius); }
+  .nav button:hover, .nav button.active { background: var(--cyan-soft); color: var(--cyan); }
+  .work { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .tabs { display: flex; overflow-x: auto; border-bottom: 1px solid var(--line); background: var(--bg-deep); min-height: 37px; }
+  .tab { display: flex; gap: 8px; align-items: center; padding: 8px 12px; color: var(--muted); font-family: var(--mono); cursor: pointer; border-top: 2px solid transparent; white-space: nowrap; }
+  .tab.active { color: var(--cyan); border-top-color: var(--cyan); background: var(--bg); }
+  .tab .x { opacity: .5; } .tab .x:hover { opacity: 1; color: var(--red); }
+  .views { flex: 1; min-height: 0; position: relative; }
+  .views iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: none; background: var(--bg); }
+  .views iframe.active { display: block; }
+  .home { position: absolute; inset: 0; overflow: auto; padding: 24px; display: none; }
+  .home.active { display: block; }
+  .home h1 { font: bold 22px var(--mono); color: var(--cyan); margin: 0 0 4px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin: 16px 0 28px; }
+  .tile { cursor: pointer; transition: border-color .15s; }
+  .tile:hover { border-color: var(--cyan); }
+  .tile .ic { font-size: 22px; color: var(--cyan); }
+  .tile b { display: block; margin: 6px 0 4px; }
+  .ki-row { display: flex; align-items: center; gap: 8px; }
+  .status { padding: 6px 12px; color: var(--muted); font: 11px var(--mono); border-top: 1px solid var(--line); background: var(--bg-deep); display: flex; gap: 16px; }
+  /* Befehlspalette */
+  .palette { position: fixed; inset: 0; background: #0008; display: none; align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 10; }
+  .palette.open { display: flex; }
+  .palette .box { width: min(560px, 92vw); }
+  .palette input { width: 100%; }
+  .palette ul { list-style: none; margin: 8px 0 0; padding: 0; max-height: 50vh; overflow: auto; }
+  .palette li { padding: 8px 10px; border-radius: var(--radius); cursor: pointer; font-family: var(--mono); }
+  .palette li.sel, .palette li:hover { background: var(--cyan-soft); color: var(--cyan); }
+  @media (max-width: 700px) { main { grid-template-columns: 1fr; } .side { display: none; } .side.mobile { display: flex; position: fixed; inset: 52px 0 28px; z-index: 5; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <button class="btn" id="sideBtn" title="Menü">☰</button>
+  <div class="brand" id="brand">〄 MRPG Zentrale</div>
+  <div class="spacer"></div>
+  <button class="btn" id="palBtn">⌘ Befehle <span class="muted mono">Strg+K</span></button>
+</header>
+<main>
+  <aside class="side" id="side">
+    <div class="head">Module</div>
+    <nav class="nav" id="nav"></nav>
+  </aside>
+  <section class="work">
+    <div class="tabs" id="tabs"></div>
+    <div class="views" id="views">
+      <div class="home active" id="home">
+        <h1>〄 MRPG Zentrale</h1>
+        <div class="muted">Alle Projekte, Apps und KI-Modelle an einem Ort.</div>
+        <h3>Module</h3>
+        <div class="grid" id="tiles"></div>
+        <h3>KI-Modelle</h3>
+        <div class="grid" id="ki"></div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer class="status"><span id="stInfo">…</span><span id="stKi"></span><span class="spacer"></span><span id="stEvt"></span></footer>
+
+<div class="palette" id="palette"><div class="box card">
+  <input class="input" id="palIn" placeholder="Modul oder Befehl suchen …" autocomplete="off">
+  <ul id="palList"></ul>
+</div></div>
+
+<script src="/zentrale-sdk.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

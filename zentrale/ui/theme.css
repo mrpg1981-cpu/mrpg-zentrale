@@ -1,0 +1,31 @@
+/* MrPG.dev Design-Tokens – Module binden das ein: <link rel="stylesheet" href="/theme.css"> */
+:root {
+  --bg: #2b2f36;
+  --bg-deep: #24272d;
+  --bg-term: #171a1f;
+  --panel: #383c44;
+  --panel-2: #292d34;
+  --line: #59616d;
+  --text: #f2f5f7;
+  --muted: #b9bec7;
+  --cyan: #67f5ff;
+  --cyan-soft: #67f5ff22;
+  --green: #3fb950;
+  --red: #ff6b6b;
+  --yellow: #f5d76e;
+  --radius: 6px;
+  --mono: Consolas, "JetBrains Mono", ui-monospace, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px var(--sans); }
+.btn { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 11px; cursor: pointer; font: inherit; }
+.btn:hover { border-color: var(--cyan); }
+.btn.primary { background: var(--cyan); color: #111; border-color: var(--cyan); }
+.input, select.input, textarea.input { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font: inherit; outline: none; }
+.input:focus { border-color: var(--cyan); }
+.card { background: var(--bg-deep); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+.mono { font-family: var(--mono); }
+.muted { color: var(--muted); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.dot.ok { background: var(--green); } .dot.warn { background: var(--yellow); } .dot.err { background: var(--red); }

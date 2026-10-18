@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>System</title><link rel="stylesheet" href="/theme.css">
+<style> body { padding: 20px; } h2 { color: var(--cyan); font: bold 16px var(--mono); } table { border-collapse: collapse; width: 100%; } td, th { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); } #ev { background: var(--bg-term); color: var(--green); padding: 12px; height: 240px; overflow: auto; font: 12px var(--mono); white-space: pre-wrap; } </style>
+</head><body>
+<h2>Info</h2><div class="card mono" id="info">…</div>
+<h2>KI-CLIs</h2><table class="card"><thead><tr><th></th><th>Name</th><th>Pfad</th><th>Login</th></tr></thead><tbody id="ki"></tbody></table>
+<h2>Event-Bus</h2>
+<div style="display:flex;gap:8px;margin-bottom:8px"><button class="btn" id="ping">Test-Event senden</button></div>
+<div id="ev"></div>
+<script src="/zentrale-sdk.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+zentrale.info().then(i => $('#info').textContent = `Version ${i.version} · ${i.docker ? 'Docker' : i.platform} · Daten: ${i.data}`);
+zentrale.ki.status().then(st => $('#ki').innerHTML = st.map(p =>
+  `<tr><td><span class="dot ${p.installed ? 'ok' : 'err'}"></span></td><td>${p.name}</td><td class="mono muted">${p.path || '—'}</td><td>${p.loggedIn === null ? '—' : p.loggedIn ? 'ja' : '<code>node server.js login ' + p.id + '</code>'}</td></tr>`).join(''));
+zentrale.events.on('*', (_, m) => { $('#ev').textContent += `${new Date(m.ts).toLocaleTimeString()}  ${m.from} → ${m.type}  ${JSON.stringify(m.payload)}\n`; $('#ev').scrollTop = 1e9; });
+$('#ping').onclick = () => zentrale.events.emit('ping', { hallo: 'Zentrale' });
+</script>
+</body></html>

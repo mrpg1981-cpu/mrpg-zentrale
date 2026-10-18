@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KI-Chat</title><link rel="stylesheet" href="/theme.css">
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; }
+  .bar { display: flex; gap: 8px; padding: 10px; border-bottom: 1px solid var(--line); background: var(--bg-deep); flex-wrap: wrap; }
+  #log { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 860px; white-space: pre-wrap; line-height: 1.5; }
+  .msg.user { align-self: flex-end; background: var(--cyan-soft); border-color: var(--cyan); }
+  .msg .who { font: 11px var(--mono); color: var(--cyan); margin-bottom: 6px; }
+  .msg.err { border-color: var(--red); }
+  form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); background: var(--bg-deep); }
+  textarea { flex: 1; resize: none; height: 64px; }
+</style></head>
+<body>
+<div class="bar">
+  <select class="input" id="prov"></select>
+  <input class="input mono" id="model" placeholder="Modell (optional)" style="width:180px">
+  <span class="spacer" style="flex:1"></span>
+  <button class="btn" id="clear">Verlauf leeren</button>
+</div>
+<div id="log"></div>
+<form id="f">
+  <textarea class="input" id="q" placeholder="Frage stellen … (Strg+Enter sendet)"></textarea>
+  <button class="btn primary" id="send">Senden</button>
+</form>
+<script src="/zentrale-sdk.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+let history = [], ctrl = null;
+
+function add(role, text, who) {
+  const d = document.createElement('div');
+  d.className = 'card msg ' + role;
+  d.innerHTML = '<div class="who"></div><div class="body"></div>';
+  d.querySelector('.who').textContent = who;
+  d.querySelector('.body').textContent = text;
+  $('#log').appendChild(d); $('#log').scrollTop = 1e9;
+  return d;
+}
+async function save() { await zentrale.store.set({ history: history.slice(-100), provider: $('#prov').value, model: $('#model').value }); }
+
+(async () => {
+  const [st, saved] = await Promise.all([zentrale.ki.status(), zentrale.store.get()]);
+  $('#prov').innerHTML = st.map(p => `<option value="${p.id}" ${p.installed ? '' : 'disabled'}>${p.name}${p.installed ? '' : ' (fehlt)'}</option>`).join('');
+  if (saved.provider) $('#prov').value = saved.provider;
+  if (saved.model) $('#model').value = saved.model;
+  history = saved.history || [];
+  history.forEach(h => add(h.role, h.text, h.who));
+})();
+
+$('#f').onsubmit = async (e) => {
+  e.preventDefault();
+  if (ctrl) { ctrl.abort(); return; }
+  const prompt = $('#q').value.trim(); if (!prompt) return;
+  const provider = $('#prov').value, model = $('#model').value.trim();
+  $('#q').value = '';
+  add('user', prompt, 'Du'); history.push({ role: 'user', text: prompt, who: 'Du' });
+  const who = $('#prov').selectedOptions[0].textContent + (model ? ' · ' + model : '');
+  const box = add('ai', '…', who), body = box.querySelector('.body');
+  ctrl = new AbortController(); $('#send').textContent = 'Stopp';
+  try {
+    const full = await zentrale.ki.ask({ provider, model, prompt, signal: ctrl.signal,
+      onChunk: (_, all) => { body.textContent = all; $('#log').scrollTop = 1e9; } });
+    if (!full) body.textContent = '(keine Antwort – angemeldet?)';
+    history.push({ role: 'ai', text: body.textContent, who });
+    zentrale.events.emit('ki.answer', { provider, prompt });
+  } catch (err) {
+    if (err.name !== 'AbortError') { box.classList.add('err'); body.textContent = 'Fehler: ' + err.message; }
+  } finally { ctrl = null; $('#send').textContent = 'Senden'; save(); }
+};
+$('#q').onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('#f').requestSubmit(); };
+$('#clear').onclick = () => { history = []; $('#log').innerHTML = ''; save(); };
+</script>
+</body></html>

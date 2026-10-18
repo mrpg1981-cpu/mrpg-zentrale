@@ -1,0 +1,14 @@
+services:
+  zentrale:
+    build: .
+    container_name: mrpg-zentrale
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7777:7777"   # nur lokal; für Zugriff im LAN "7777:7777"
+    volumes:
+      - ./data:/data            # Logins, Verlauf, Einstellungen
+      - ./modules:/app/modules  # Module ohne Neubau ändern
+      - ${PROJEKTE:-~/Projekte}:/projekte
+    # Optional: Ollama auf dem Host nutzen
+    # extra_hosts: ["host.docker.internal:host-gateway"]
+    # environment: [OLLAMA_HOST=http://host.docker.internal:11434]
