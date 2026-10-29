@@ -12,8 +12,32 @@ KI-Werkzeugen und Projekten installiert ist.
 ```
 python pc_scanner.py              # nur das Benutzerverzeichnis
 python pc_scanner.py C:\ D:\      # ganze Laufwerke
+python pc_scanner.py --github     # zusätzlich GitHub durchsuchen
 python pc_scanner.py --out bericht --no-open
 ```
+
+## GitHub-Suche (`--github`)
+
+Mit `--github` durchsucht der Scanner zusätzlich öffentliche GitHub-Repos nach
+**Skills, Agenten, MCP-Servern und Tools**. Jeder Treffer bekommt im Bericht
+unter dem Reiter „GitHub" drei Links:
+
+- **Auf GitHub öffnen** – die Projektseite.
+- **ZIP herunterladen** – das Projekt als ZIP-Archiv.
+- **Clone-Link** – kopiert `git clone …` in die Zwischenablage.
+
+Ohne Anmeldung erlaubt GitHub nur wenige Suchanfragen pro Minute. Für mehr
+Treffer kann ein Token übergeben werden:
+
+```
+python pc_scanner.py --github --github-token DEIN_TOKEN
+# oder per Umgebungsvariable:
+set GITHUB_TOKEN=DEIN_TOKEN        (Windows)
+export GITHUB_TOKEN=DEIN_TOKEN     (Linux/Mac)
+```
+
+Ohne Internet wird der GitHub-Teil einfach übersprungen, der PC-Scan läuft
+trotzdem durch.
 
 ## Was gefunden wird
 
@@ -27,6 +51,8 @@ python pc_scanner.py --out bericht --no-open
 - **Tools/CLIs** – Kommandozeilen-Tools aus npm-Paketen.
 - **Regeln** – `CLAUDE.md`, `AGENTS.md`, `.cursorrules` usw.
 - **Zugänge** – siehe unten.
+- **GitHub** – mit `--github`: Skills/Agenten/MCP/Tools aus öffentlichen Repos
+  mit Download-Links (siehe unten).
 - **Alle MD** – jede Markdown-Datei mit Volltextsuche.
 
 Systemordner (`/usr`, `/opt`, `/mnt`, `Windows`, `Program Files`, Caches,

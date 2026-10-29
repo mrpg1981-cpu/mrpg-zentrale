@@ -5,9 +5,14 @@ er eine SICHERE Zugangs-Übersicht (nur SSH-Hostnamen, Benutzer und Pfade) —
 es werden ausdrücklich KEINE privaten Schlüssel und KEINE Passwörter gelesen
 oder gespeichert.
 
+Mit --github durchsucht er zusätzlich öffentliche GitHub-Repos nach Skills,
+Agenten, MCP-Servern und Tools und stellt zu jedem Treffer Download-/Clone-Links
+bereit.
+
 Nutzung:
     python pc_scanner.py                 # scannt das Home-Verzeichnis
     python pc_scanner.py C:\\ D:\\        # scannt bestimmte Laufwerke/Ordner
+    python pc_scanner.py --github        # zusätzlich GitHub durchsuchen
     python pc_scanner.py --out bericht   # Ausgabeordner festlegen
 
 Vorinstallierte Systemordner (/usr, /opt, /mnt, ... bzw. Windows/Program Files)
@@ -22,8 +27,19 @@ import json
 import os
 import re
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 import webbrowser
 from pathlib import Path
+
+# GitHub-Suche: Suchbegriffe je Kategorie. Treffer bekommen einen Download-/Clone-Link.
+GITHUB_QUERIES = {
+    "skills": "claude skill SKILL.md",
+    "agents": "claude code subagent agent",
+    "mcp": "mcp server model context protocol",
+    "tools": "claude code plugin tool",
+}
 
 SKIP_DIRS = {
     "node_modules", ".git", "__pycache__", ".venv", "venv", "env", ".tox",
@@ -116,6 +132,65 @@ def load_json(p):
         return json.loads(read_text(p, 5_000_000))
     except (ValueError, TypeError):
         return None
+
+
+def github_search(per_category=8, token=None):
+    """Durchsucht öffentliche GitHub-Repos nach Skills, Agenten, MCP-Servern und
+    Tools. Liefert je Kategorie eine Liste mit Name, Beschreibung, Sternen und
+    Download-/Clone-Links. Ohne Internet oder bei einem Fehler: leeres Ergebnis.
+
+    Mit einem Token (Parameter oder Umgebungsvariable GITHUB_TOKEN) sind mehr
+    Anfragen pro Minute möglich; ohne Token reicht es für einen Durchlauf.
+    """
+    token = token or os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "mrpg-pc-scanner"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    # Falls hinter einem Proxy mit eigenem Zertifikat gearbeitet wird (z. B. Firmen-
+    # netz oder diese Cloud-Umgebung), dessen CA-Bundle verwenden, sonst Standard.
+    import ssl
+    ca = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
+    for cand in ("/root/.ccr/ca-bundle.crt", "/etc/ssl/certs/ca-certificates.crt"):
+        if not ca and os.path.isfile(cand):
+            ca = cand
+    try:
+        ctx = ssl.create_default_context(cafile=ca) if ca else ssl.create_default_context()
+    except OSError:
+        ctx = ssl.create_default_context()
+    found = {}
+    for cat, query in GITHUB_QUERIES.items():
+        url = ("https://api.github.com/search/repositories?q="
+               + urllib.parse.quote(query)
+               + f"&sort=stars&order=desc&per_page={per_category}")
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
+                data = json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            hint = {403: " (Rate-Limit – mit --github-token mehr Anfragen)",
+                    401: " (Token ungültig)"}.get(e.code, "")
+            print(f"  GitHub-Suche '{cat}' übersprungen: HTTP {e.code}{hint}.")
+            found[cat] = []
+            continue
+        except (urllib.error.URLError, ValueError, OSError) as e:
+            print(f"  GitHub-Suche '{cat}' übersprungen ({e.__class__.__name__} – kein Internet?).")
+            found[cat] = []
+            continue
+        items = []
+        for it in data.get("items", []):
+            items.append({
+                "name": it.get("full_name", ""),
+                "description": (it.get("description") or "")[:300],
+                "stars": it.get("stargazers_count", 0),
+                "language": it.get("language") or "",
+                "url": it.get("html_url", ""),
+                "clone": it.get("clone_url", ""),
+                "zip": f"{it.get('html_url','')}/archive/refs/heads/{it.get('default_branch','main')}.zip",
+                "category": cat,
+            })
+        found[cat] = items
+        print(f"  GitHub '{cat}': {len(items)} Repos gefunden.")
+    return found
 
 
 def collect_access_overview():
@@ -211,9 +286,10 @@ def walk(roots, progress):
             yield Path(dirpath), dirnames, filenames
 
 
-def scan(roots):
+def scan(roots, with_github=False, github_token=None):
     res = {"md": [], "skills": [], "agents": [], "commands": [], "rules": [],
-           "mcp": [], "plugins": [], "projects": [], "tools": [], "access": []}
+           "mcp": [], "plugins": [], "projects": [], "tools": [], "access": [],
+           "github": {}}
     git_roots = set()
     count = [0]
 
@@ -223,6 +299,10 @@ def scan(roots):
             print(f"\r  {count[0]} Ordner gescannt ...", end="", flush=True)
 
     res["access"] = collect_access_overview()
+
+    if with_github:
+        print("Suche auf GitHub nach Skills, Agenten, MCP-Servern und Tools ...")
+        res["github"] = github_search(token=github_token)
 
     seen_cfg = set()
     for p in mcp_config_candidates():
@@ -303,8 +383,10 @@ def write_reports(res, outdir, roots):
         for m in res["md"]:
             f.write(f"\n\n---\n\n## {m['title']}\n`{m['path']}` · {m['kind']} · {m['modified']}\n\n{m['text']}\n")
 
-    light = {k: v for k, v in res.items() if k != "md"}
+    light = {k: v for k, v in res.items() if k not in ("md", "github")}
     light["md"] = [{k: v for k, v in m.items() if k != "text"} for m in res["md"]]
+    # GitHub-Treffer aller Kategorien zu einer flachen Liste zusammenführen
+    light["github"] = [it for items in res.get("github", {}).values() for it in items]
     light["meta"] = {"scanned": stamp, "roots": [str(r) for r in roots]}
     (outdir / "bericht.json").write_text(json.dumps(light, ensure_ascii=False, indent=1), encoding="utf-8")
 
@@ -329,15 +411,18 @@ nav{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}nav button{border:1px sol
 nav button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 main{padding:16px;max-width:1100px;margin:auto}.it{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;margin:6px 0}
 .t{font-weight:600}.p{color:var(--mut);font-size:12px;word-break:break-all}.d{margin-top:4px}.tag{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--bd);margin-left:6px}
+.lnk{display:inline-block;margin:6px 8px 0 0;padding:4px 10px;border-radius:6px;background:var(--acc);color:#fff;text-decoration:none;font-size:12px}
+.lnk.alt{background:transparent;color:var(--acc);border:1px solid var(--acc)}
 </style></head><body><header><h1>MRPG PC-Scan <span class="p" id="meta"></span></h1>
 <input id="q" placeholder="Suchen in Namen, Pfaden, Beschreibungen und MD-Inhalten …"><nav id="tabs"></nav></header><main id="list"></main>
 <script>
-const D=__DATA__;const cats=[["projects","Projekte"],["mcp","MCP-Server"],["agents","Agenten"],["skills","Skills"],["commands","Commands"],["plugins","Plugins"],["tools","Tools/CLIs"],["rules","Regeln (CLAUDE.md …)"],["access","Zugänge"],["md","Alle MD"]];
+const D=__DATA__;const cats=[["projects","Projekte"],["mcp","MCP-Server"],["agents","Agenten"],["skills","Skills"],["commands","Commands"],["plugins","Plugins"],["tools","Tools/CLIs"],["rules","Regeln (CLAUDE.md …)"],["access","Zugänge"],["github","GitHub (zum Download)"],["md","Alle MD"]];
 let cur="projects";const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 document.getElementById("meta").textContent=D.meta.scanned+" · "+D.meta.roots.join(", ");
 function row(c,x){const t=x.title||x.name;
 if(c=="access"){const d=[x.user&&("Benutzer: "+x.user),x.hostname&&("Adresse: "+x.hostname)].filter(Boolean).join(" · ");
 return `<div class="it"><div class="t">${esc(t)}<span class=tag>${esc(x.type)}</span></div>${d?`<div class=d>${esc(d)}</div>`:""}<div class="p">${esc(x.source)}</div></div>`}
+if(c=="github"){return `<div class="it"><div class="t">${esc(x.name)}<span class=tag>${esc(x.category)}</span>${x.stars?`<span class=tag>★ ${x.stars}</span>`:""}${x.language?`<span class=tag>${esc(x.language)}</span>`:""}</div>${x.description?`<div class=d>${esc(x.description)}</div>`:""}<div><a class=lnk href="${esc(x.url)}" target=_blank rel=noopener>Auf GitHub öffnen</a><a class="lnk alt" href="${esc(x.zip)}" target=_blank rel=noopener>ZIP herunterladen</a><a class="lnk alt" href="${esc(x.url)}" target=_blank rel=noopener onclick="navigator.clipboard&&navigator.clipboard.writeText('git clone '+${JSON.stringify(x.clone)});return true">Clone-Link</a></div></div>`}
 let d=x.description||x.command||(x.types||[]).join(", ")||"";if(c=="md")d=x.description||x.kind;
 return `<div class="it"><div class="t">${esc(t)}${x.kind&&c=="md"?`<span class=tag>${esc(x.kind)}</span>`:""}${x.types&&c=="projects"?`<span class=tag>${esc(x.types.join(" · "))}</span>`:""}</div><div class="p">${esc(x.path||x.source)}</div>${d&&c!="projects"?`<div class=d>${esc(d)}</div>`:(x.description?`<div class=d>${esc(x.description)}</div>`:"")}</div>`}
 function draw(){const q=document.getElementById("q").value.toLowerCase();
@@ -353,16 +438,23 @@ def main():
     ap.add_argument("roots", nargs="*", help="Ordner/Laufwerke (Standard: Home-Verzeichnis)")
     ap.add_argument("--out", default="pc-scan-bericht", help="Ausgabeordner")
     ap.add_argument("--no-open", action="store_true", help="Browser nicht automatisch öffnen")
+    ap.add_argument("--github", action="store_true",
+                    help="Zusätzlich GitHub nach Skills/Agenten/MCP/Tools durchsuchen (mit Download-Links)")
+    ap.add_argument("--github-token", default=None,
+                    help="GitHub-Token für mehr Anfragen (sonst GITHUB_TOKEN-Umgebungsvariable)")
     a = ap.parse_args()
     roots = [Path(r) for r in a.roots] or [Path.home()]
     print("MRPG PC-Scanner – scanne:", ", ".join(map(str, roots)))
-    res = scan(roots)
+    res = scan(roots, with_github=a.github, github_token=a.github_token)
     report = write_reports(res, Path(a.out), roots)
     print("\nErgebnis:")
     for k, n in [("projects", "Projekte"), ("mcp", "MCP-Server"), ("agents", "Agenten"), ("skills", "Skills"),
                  ("commands", "Commands"), ("plugins", "Plugins"), ("tools", "Tools"), ("rules", "Regeln"),
                  ("access", "Zugänge"), ("md", "MD-Dateien")]:
         print(f"  {n:<12} {len(res[k])}")
+    gh = sum(len(v) for v in res.get("github", {}).values())
+    if a.github:
+        print(f"  {'GitHub-Repos':<12} {gh}")
     print(f"\nBericht: {report.resolve()}")
     if not a.no_open:
         webbrowser.open(report.resolve().as_uri())
