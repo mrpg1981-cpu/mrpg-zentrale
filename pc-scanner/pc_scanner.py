@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """MRPG PC-Scanner: liest den PC aus, sammelt alle .md-Dateien und erkennt
-MCP-Server, Agenten, Skills, Tools/Plugins und Projekte.
+MCP-Server, Agenten, Skills, Tools/Plugins und Projekte. Zusätzlich erstellt
+er eine SICHERE Zugangs-Übersicht (nur SSH-Hostnamen, Benutzer und Pfade) —
+es werden ausdrücklich KEINE privaten Schlüssel und KEINE Passwörter gelesen
+oder gespeichert.
 
 Nutzung:
     python pc_scanner.py                 # scannt das Home-Verzeichnis
     python pc_scanner.py C:\\ D:\\        # scannt bestimmte Laufwerke/Ordner
     python pc_scanner.py --out bericht   # Ausgabeordner festlegen
+
+Vorinstallierte Systemordner (/usr, /opt, /mnt, ... bzw. Windows/Program Files)
+werden übersprungen, außer sie werden selbst als Startpunkt angegeben.
 
 Ergebnis: bericht.html (zum Durchsuchen im Browser), bericht.json, alle_md.md
 """
@@ -21,12 +27,16 @@ from pathlib import Path
 
 SKIP_DIRS = {
     "node_modules", ".git", "__pycache__", ".venv", "venv", "env", ".tox",
-    "site-packages", "dist", "build", ".next", ".cache", "cache", "Cache",
+    "site-packages", "dist-packages", "dist", "build", ".next", ".cache", "cache", "Cache",
     "$Recycle.Bin", "System Volume Information", "Windows", "WinSxS",
     "Program Files", "Program Files (x86)", "ProgramData", "AppData\\Local\\Temp",
     "proc", "sys", "dev", "snap", "Library", ".Trash", ".npm", ".gradle",
-    ".m2", ".cargo", ".rustup", "target", "vendor",
+    ".m2", ".cargo", ".rustup", "target", "vendor", "third_party", "gems",
 }
+# Ganze Pfad-Anfänge, die übersprungen werden (vorinstallierte Systemsoftware).
+# Entfällt automatisch, wenn der Nutzer gezielt so einen Ordner als Startpunkt angibt.
+SKIP_PREFIXES_UNIX = ("/usr", "/opt", "/mnt", "/snap", "/var", "/lib", "/boot",
+                      "/run", "/srv", "/proc", "/sys", "/dev")
 # Ordner, die trotz Punkt am Anfang gescannt werden (hier stecken Agenten/MCP/Skills)
 KEEP_HIDDEN = {".claude", ".cursor", ".vscode", ".codex", ".continue", ".github",
                ".windsurf", ".gemini", ".aider", ".roo", ".cline", ".config"}
@@ -108,41 +118,111 @@ def load_json(p):
         return None
 
 
+def collect_access_overview():
+    """Liefert eine SICHERE Übersicht konfigurierter Zugänge: nur Hostnamen,
+    Benutzernamen und Pfade. Es werden KEINE privaten Schlüssel und KEINE
+    Passwörter gelesen oder gespeichert — nur, DASS ein Zugang existiert."""
+    home = Path.home()
+    out = []
+    # ~/.ssh/config -> Host-Einträge (keine Schlüsselinhalte)
+    cfg = home / ".ssh" / "config"
+    if cfg.is_file():
+        host = user = hostname = None
+        for raw in read_text(cfg, 200_000).splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            key, _, val = line.partition(" ")
+            k = key.lower()
+            if k == "host":
+                if host:
+                    out.append({"type": "SSH-Host", "name": host, "user": user or "",
+                                "hostname": hostname or "", "source": str(cfg)})
+                host, user, hostname = val.strip(), None, None
+            elif k == "hostname":
+                hostname = val.strip()
+            elif k == "user":
+                user = val.strip()
+        if host:
+            out.append({"type": "SSH-Host", "name": host, "user": user or "",
+                        "hostname": hostname or "", "source": str(cfg)})
+    # known_hosts -> wie viele bekannte Server (nur Anzahl, keine Inhalte)
+    kh = home / ".ssh" / "known_hosts"
+    if kh.is_file():
+        try:
+            n = sum(1 for ln in open(kh, encoding="utf-8", errors="replace") if ln.strip())
+            out.append({"type": "known_hosts", "name": f"{n} bekannte Server", "user": "",
+                        "hostname": "", "source": str(kh)})
+        except OSError:
+            pass
+    # Vorhandene Schlüsseldateien -> nur Name/Pfad vermerken, Inhalt NICHT lesen
+    ssh_dir = home / ".ssh"
+    if ssh_dir.is_dir():
+        for f in sorted(ssh_dir.glob("*.pub")):
+            out.append({"type": "SSH-Key (öffentlich)", "name": f.name, "user": "",
+                        "hostname": "", "source": str(f)})
+        for f in sorted(ssh_dir.glob("id_*")):
+            if not f.name.endswith(".pub"):
+                out.append({"type": "SSH-Key vorhanden", "name": f.name,
+                            "user": "(Inhalt nicht gelesen)", "hostname": "", "source": str(f)})
+    return out
+
+
 def classify_md(p, text):
-    """Ordnet eine .md-Datei als Skill, Agent, Command, Regeln oder Doku ein."""
+    """Ordnet eine .md-Datei einer Art zu.
+
+    Nur eine Datei namens SKILL.md gilt als echter Skill; andere .md-Dateien in
+    einem Skill-Ordner sind Hilfsdateien ('skill-ref') und werden getrennt gezählt.
+    """
     parts = [x.lower() for x in p.parts]
     name = p.name.lower()
     fm = frontmatter(text)
-    if name == "skill.md" or "skills" in parts:
+    in_agents = "agents" in parts
+    if name == "skill.md":
         return "skill", fm
-    if "agents" in parts:
+    if in_agents:
         return "agent", fm
     if "commands" in parts or "prompts" in parts:
         return "command", fm
     if name in ("claude.md", "agents.md", "gemini.md", ".cursorrules", "copilot-instructions.md") \
             or "rules" in parts:
         return "rules", fm
+    if "skills" in parts:
+        return "skill-ref", fm
     return "doc", fm
 
 
 def walk(roots, progress):
+    # Systemordner nur überspringen, wenn der Nutzer sie nicht selbst als Start wählte
+    explicit = {str(Path(r).resolve()) for r in roots}
+
+    def is_system(path):
+        rp = str(Path(path).resolve())
+        if rp in explicit or any(rp.startswith(e + os.sep) and e in explicit for e in explicit):
+            return False
+        return rp.startswith(SKIP_PREFIXES_UNIX)
+
     for root in roots:
         for dirpath, dirnames, filenames in os.walk(root, onerror=lambda e: None):
             dirnames[:] = [d for d in dirnames
-                           if d not in SKIP_DIRS and (not d.startswith(".") or d in KEEP_HIDDEN or d == ".git")]
+                           if d not in SKIP_DIRS and (not d.startswith(".") or d in KEEP_HIDDEN or d == ".git")
+                           and not is_system(os.path.join(dirpath, d))]
             progress(dirpath)
             yield Path(dirpath), dirnames, filenames
 
 
 def scan(roots):
     res = {"md": [], "skills": [], "agents": [], "commands": [], "rules": [],
-           "mcp": [], "plugins": [], "projects": [], "tools": []}
+           "mcp": [], "plugins": [], "projects": [], "tools": [], "access": []}
+    git_roots = set()
     count = [0]
 
     def progress(d):
         count[0] += 1
         if count[0] % 500 == 0:
             print(f"\r  {count[0]} Ordner gescannt ...", end="", flush=True)
+
+    res["access"] = collect_access_overview()
 
     seen_cfg = set()
     for p in mcp_config_candidates():
@@ -155,8 +235,16 @@ def scan(roots):
                     for plug, on in data["enabledPlugins"].items():
                         res["plugins"].append({"name": plug, "enabled": on, "source": str(p)})
 
+    plugin_dirs = set()
     for d, dirnames, files in walk(roots, progress):
         fileset = set(files) | set(dirnames)
+        # Plugin ohne Manifest: Ordner unterhalb eines 'plugins'-Pfads mit skills/ oder commands/
+        parts_low = [x.lower() for x in d.parts]
+        if "plugins" in parts_low and ("skills" in dirnames or "commands" in dirnames) \
+                and str(d) not in plugin_dirs and d.name.lower() not in ("plugins", "synced"):
+            plugin_dirs.add(str(d))
+            if not any(p.get("source", "").startswith(str(d)) for p in res["plugins"]):
+                res["plugins"].append({"name": d.name, "description": "(ohne Manifest erkannt)", "source": str(d)})
         markers = [t for m, t in PROJECT_MARKERS.items() if m in fileset]
         if markers:
             info = {"name": d.name, "path": str(d), "types": sorted(set(markers)), "description": ""}
@@ -168,10 +256,11 @@ def scan(roots):
             readme = next((f for f in files if f.lower() == "readme.md"), None)
             if readme and not info["description"]:
                 info["description"] = first_heading(read_text(d / readme, 4000))
-            # nur oberste Projektebene zählen, keine Unterpakete in bereits erkannten Repos
-            if not any(info["path"].startswith(pr["path"] + os.sep) for pr in res["projects"][-50:]
-                       if "Git" in pr["types"]):
+            # Unterpakete innerhalb eines bereits erkannten Git-Repos nicht erneut zählen
+            if not any(info["path"] == g or info["path"].startswith(g + os.sep) for g in git_roots):
                 res["projects"].append(info)
+                if "Git" in info["types"]:
+                    git_roots.add(info["path"])
 
         for f in files:
             fp = d / f
@@ -180,9 +269,10 @@ def scan(roots):
                 data = load_json(fp)
                 if data is not None:
                     find_mcp_servers(data, str(fp), res["mcp"])
-            if low == "plugin.json" and d.name == ".claude-plugin":
+            if low in ("plugin.json", "marketplace.json"):
                 pj = load_json(fp) or {}
-                res["plugins"].append({"name": pj.get("name", d.parent.name),
+                base = d.parent if d.name == ".claude-plugin" else d
+                res["plugins"].append({"name": pj.get("name", base.name),
                                        "description": pj.get("description", ""), "source": str(fp)})
             if low.endswith((".md", ".mdc", ".markdown")):
                 text = read_text(fp)
@@ -197,7 +287,7 @@ def scan(roots):
                          "size": size, "modified": mtime, "text": text}
                 res["md"].append(entry)
                 bucket = {"skill": "skills", "agent": "agents", "command": "commands", "rules": "rules"}.get(kind)
-                if bucket and (kind != "skill" or low == "skill.md" or "skills" in [x.lower() for x in fp.parts]):
+                if bucket:
                     res[bucket].append({k: entry[k] for k in ("title", "description", "path")})
     print()
     return res
@@ -242,10 +332,13 @@ main{padding:16px;max-width:1100px;margin:auto}.it{background:var(--card);border
 </style></head><body><header><h1>MRPG PC-Scan <span class="p" id="meta"></span></h1>
 <input id="q" placeholder="Suchen in Namen, Pfaden, Beschreibungen und MD-Inhalten …"><nav id="tabs"></nav></header><main id="list"></main>
 <script>
-const D=__DATA__;const cats=[["projects","Projekte"],["mcp","MCP-Server"],["agents","Agenten"],["skills","Skills"],["commands","Commands"],["plugins","Plugins"],["tools","Tools/CLIs"],["rules","Regeln (CLAUDE.md …)"],["md","Alle MD"]];
+const D=__DATA__;const cats=[["projects","Projekte"],["mcp","MCP-Server"],["agents","Agenten"],["skills","Skills"],["commands","Commands"],["plugins","Plugins"],["tools","Tools/CLIs"],["rules","Regeln (CLAUDE.md …)"],["access","Zugänge"],["md","Alle MD"]];
 let cur="projects";const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 document.getElementById("meta").textContent=D.meta.scanned+" · "+D.meta.roots.join(", ");
-function row(c,x){const t=x.title||x.name;let d=x.description||x.command||(x.types||[]).join(", ")||"";if(c=="md")d=x.description||x.kind;
+function row(c,x){const t=x.title||x.name;
+if(c=="access"){const d=[x.user&&("Benutzer: "+x.user),x.hostname&&("Adresse: "+x.hostname)].filter(Boolean).join(" · ");
+return `<div class="it"><div class="t">${esc(t)}<span class=tag>${esc(x.type)}</span></div>${d?`<div class=d>${esc(d)}</div>`:""}<div class="p">${esc(x.source)}</div></div>`}
+let d=x.description||x.command||(x.types||[]).join(", ")||"";if(c=="md")d=x.description||x.kind;
 return `<div class="it"><div class="t">${esc(t)}${x.kind&&c=="md"?`<span class=tag>${esc(x.kind)}</span>`:""}${x.types&&c=="projects"?`<span class=tag>${esc(x.types.join(" · "))}</span>`:""}</div><div class="p">${esc(x.path||x.source)}</div>${d&&c!="projects"?`<div class=d>${esc(d)}</div>`:(x.description?`<div class=d>${esc(x.description)}</div>`:"")}</div>`}
 function draw(){const q=document.getElementById("q").value.toLowerCase();
 document.getElementById("tabs").innerHTML=cats.map(([k,n])=>{const c=D[k].filter(x=>!q||JSON.stringify(x).toLowerCase().includes(q)).length;return `<button class="${k==cur?"on":""}" onclick="cur='${k}';draw()">${n} (${c})</button>`}).join("");
@@ -268,7 +361,7 @@ def main():
     print("\nErgebnis:")
     for k, n in [("projects", "Projekte"), ("mcp", "MCP-Server"), ("agents", "Agenten"), ("skills", "Skills"),
                  ("commands", "Commands"), ("plugins", "Plugins"), ("tools", "Tools"), ("rules", "Regeln"),
-                 ("md", "MD-Dateien")]:
+                 ("access", "Zugänge"), ("md", "MD-Dateien")]:
         print(f"  {n:<12} {len(res[k])}")
     print(f"\nBericht: {report.resolve()}")
     if not a.no_open:
