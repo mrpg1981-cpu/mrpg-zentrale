@@ -286,7 +286,7 @@ def walk(roots, progress):
             yield Path(dirpath), dirnames, filenames
 
 
-def scan(roots, with_github=False, github_token=None):
+def scan(roots, with_github=False, github_token=None, on_progress=None):
     res = {"md": [], "skills": [], "agents": [], "commands": [], "rules": [],
            "mcp": [], "plugins": [], "projects": [], "tools": [], "access": [],
            "github": {}}
@@ -295,6 +295,8 @@ def scan(roots, with_github=False, github_token=None):
 
     def progress(d):
         count[0] += 1
+        if on_progress is not None:
+            on_progress(count[0], d)
         if count[0] % 500 == 0:
             print(f"\r  {count[0]} Ordner gescannt ...", end="", flush=True)
 
@@ -373,6 +375,23 @@ def scan(roots, with_github=False, github_token=None):
     return res
 
 
+def build_light(res, roots):
+    """Baut die kompakte Ergebnisstruktur (ohne die großen MD-Volltexte) für
+    JSON-Datei und HTML-Bericht. Fügt pro MD-Datei einen Suchauszug ('snippet')
+    für die Volltextsuche hinzu."""
+    stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    light = {k: v for k, v in res.items() if k not in ("md", "github")}
+    light["md"] = []
+    for m in res["md"]:
+        item = {k: v for k, v in m.items() if k != "text"}
+        item["snippet"] = m.get("text", "")[:3000]
+        light["md"].append(item)
+    # GitHub-Treffer aller Kategorien zu einer flachen Liste zusammenführen
+    light["github"] = [it for items in res.get("github", {}).values() for it in items]
+    light["meta"] = {"scanned": stamp, "roots": [str(r) for r in roots]}
+    return light
+
+
 def write_reports(res, outdir, roots):
     outdir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -383,19 +402,99 @@ def write_reports(res, outdir, roots):
         for m in res["md"]:
             f.write(f"\n\n---\n\n## {m['title']}\n`{m['path']}` · {m['kind']} · {m['modified']}\n\n{m['text']}\n")
 
-    light = {k: v for k, v in res.items() if k not in ("md", "github")}
-    light["md"] = [{k: v for k, v in m.items() if k != "text"} for m in res["md"]]
-    # GitHub-Treffer aller Kategorien zu einer flachen Liste zusammenführen
-    light["github"] = [it for items in res.get("github", {}).values() for it in items]
-    light["meta"] = {"scanned": stamp, "roots": [str(r) for r in roots]}
+    light = build_light(res, roots)
     (outdir / "bericht.json").write_text(json.dumps(light, ensure_ascii=False, indent=1), encoding="utf-8")
-
-    # Suchtext für die Volltextsuche im HTML (gekürzt)
-    for m in light["md"]:
-        src = next(x for x in res["md"] if x["path"] == m["path"])
-        m["snippet"] = src["text"][:3000]
     payload = json.dumps(light, ensure_ascii=False).replace("</", "<\\/")
-    (outdir / "bericht.html").write_text(HTML.replace("__DATA__", payload), encoding="utf-8")
+    html_doc = HTML.replace("__SERVE__", "false").replace("__DATA__", payload)
+    (outdir / "bericht.html").write_text(html_doc, encoding="utf-8")
+    return outdir / "bericht.html"
+
+
+def serve_report(roots, outdir, with_github=False, github_token=None, port=0, open_browser=True):
+    """Startet einen lokalen Mini-Webserver, scannt im Hintergrund und zeigt den
+    Fortschritt live in bericht.html. Am Ende kann das Ergebnis als JSON
+    gespeichert werden. Läuft, bis das Browserfenster 'Beenden' sendet oder der
+    Prozess abgebrochen wird."""
+    import http.server
+    import threading
+    import time
+
+    outdir.mkdir(parents=True, exist_ok=True)
+    state = {"done": False, "count": 0, "current": "", "started": time.time(),
+             "phase": "scan", "result": None, "error": None,
+             "roots": [str(r) for r in roots]}
+    stop = threading.Event()
+
+    def worker():
+        try:
+            def on_progress(n, d):
+                state["count"] = n
+                state["current"] = str(d)
+            res = scan(roots, with_github=with_github, github_token=github_token, on_progress=on_progress)
+            state["phase"] = "write"
+            write_reports(res, outdir, roots)          # schreibt auch bericht.json auf Platte
+            state["result"] = build_light(res, roots)  # für den Browser-Download
+        except Exception as e:  # Scan soll den Server nie abstürzen lassen
+            state["error"] = f"{e.__class__.__name__}: {e}"
+        finally:
+            state["done"] = True
+
+    html_doc = HTML.replace("__SERVE__", "true").replace("__DATA__", "null").encode("utf-8")
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass  # keine Konsolenausgabe pro Anfrage
+
+        def _send(self, body, ctype="application/json; charset=utf-8", extra=None):
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            for k, v in (extra or {}).items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            path = self.path.split("?", 1)[0]
+            if path in ("/", "/index.html", "/bericht.html"):
+                self._send(html_doc, "text/html; charset=utf-8")
+            elif path == "/api/status":
+                self._send(json.dumps({"done": state["done"], "count": state["count"],
+                                       "current": state["current"], "phase": state["phase"],
+                                       "elapsed": int(time.time() - state["started"]),
+                                       "error": state["error"], "roots": state["roots"]}).encode("utf-8"))
+            elif path == "/api/result":
+                body = json.dumps(state["result"] if state["result"] else {}, ensure_ascii=False).encode("utf-8")
+                self._send(body)
+            elif path in ("/bericht.json", "/download"):
+                body = json.dumps(state["result"] if state["result"] else {}, ensure_ascii=False,
+                                  indent=1).encode("utf-8")
+                self._send(body, extra={"Content-Disposition": "attachment; filename=bericht.json"})
+            else:
+                self.send_error(404)
+
+        def do_POST(self):
+            if self.path.split("?", 1)[0] == "/api/shutdown":
+                self._send(b'{"ok":true}')
+                stop.set()
+            else:
+                self.send_error(404)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    actual = srv.server_address[1]
+    url = f"http://127.0.0.1:{actual}/"
+    threading.Thread(target=worker, daemon=True).start()
+    print(f"MRPG PC-Scanner läuft im Hintergrund. Bericht im Browser: {url}")
+    print("Zum Stoppen das Browserfenster 'Beenden' nutzen oder dieses Fenster schließen.")
+    if open_browser:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
+    srv.timeout = 0.5
+    while not stop.is_set():
+        srv.handle_request()
+    srv.server_close()
     return outdir / "bericht.html"
 
 
@@ -413,23 +512,53 @@ main{padding:16px;max-width:1100px;margin:auto}.it{background:var(--card);border
 .t{font-weight:600}.p{color:var(--mut);font-size:12px;word-break:break-all}.d{margin-top:4px}.tag{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--bd);margin-left:6px}
 .lnk{display:inline-block;margin:6px 8px 0 0;padding:4px 10px;border-radius:6px;background:var(--acc);color:#fff;text-decoration:none;font-size:12px}
 .lnk.alt{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+.bar{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:0;background:var(--acc);color:#fff;padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px}
+.btn.alt{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+#prog{max-width:1100px;margin:16px auto;padding:16px;background:var(--card);border:1px solid var(--bd);border-radius:10px}
+#prog h2{margin:0 0 10px;font-size:16px}
+.track{height:12px;border-radius:999px;background:var(--bd);overflow:hidden;margin:10px 0}
+.fill{height:100%;width:30%;border-radius:999px;background:var(--acc);animation:slide 1.3s ease-in-out infinite}
+@keyframes slide{0%{margin-left:-30%}100%{margin-left:100%}}
+.hide{display:none}
 </style></head><body><header><h1>MRPG PC-Scan <span class="p" id="meta"></span></h1>
-<input id="q" placeholder="Suchen in Namen, Pfaden, Beschreibungen und MD-Inhalten …"><nav id="tabs"></nav></header><main id="list"></main>
+<div class="bar" id="toolbar"><button class="btn" id="dl">Als JSON speichern</button><button class="btn alt hide" id="stop">Beenden</button></div>
+<input id="q" placeholder="Suchen in Namen, Pfaden, Beschreibungen und MD-Inhalten …"><nav id="tabs"></nav></header>
+<section id="prog" class="hide"><h2>Durchsuche den PC …</h2><div id="pline" class="p"></div><div class="track"><div class="fill"></div></div><div id="pcur" class="p"></div></section>
+<main id="list"></main>
 <script>
-const D=__DATA__;const cats=[["projects","Projekte"],["mcp","MCP-Server"],["agents","Agenten"],["skills","Skills"],["commands","Commands"],["plugins","Plugins"],["tools","Tools/CLIs"],["rules","Regeln (CLAUDE.md …)"],["access","Zugänge"],["github","GitHub (zum Download)"],["md","Alle MD"]];
+let D=__DATA__;const SERVE=__SERVE__;
+const cats=[["projects","Projekte"],["mcp","MCP-Server"],["agents","Agenten"],["skills","Skills"],["commands","Commands"],["plugins","Plugins"],["tools","Tools/CLIs"],["rules","Regeln (CLAUDE.md …)"],["access","Zugänge"],["github","GitHub (zum Download)"],["md","Alle MD"]];
 let cur="projects";const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-document.getElementById("meta").textContent=D.meta.scanned+" · "+D.meta.roots.join(", ");
+const $=id=>document.getElementById(id);
 function row(c,x){const t=x.title||x.name;
 if(c=="access"){const d=[x.user&&("Benutzer: "+x.user),x.hostname&&("Adresse: "+x.hostname)].filter(Boolean).join(" · ");
 return `<div class="it"><div class="t">${esc(t)}<span class=tag>${esc(x.type)}</span></div>${d?`<div class=d>${esc(d)}</div>`:""}<div class="p">${esc(x.source)}</div></div>`}
 if(c=="github"){return `<div class="it"><div class="t">${esc(x.name)}<span class=tag>${esc(x.category)}</span>${x.stars?`<span class=tag>★ ${x.stars}</span>`:""}${x.language?`<span class=tag>${esc(x.language)}</span>`:""}</div>${x.description?`<div class=d>${esc(x.description)}</div>`:""}<div><a class=lnk href="${esc(x.url)}" target=_blank rel=noopener>Auf GitHub öffnen</a><a class="lnk alt" href="${esc(x.zip)}" target=_blank rel=noopener>ZIP herunterladen</a><a class="lnk alt" href="${esc(x.url)}" target=_blank rel=noopener onclick="navigator.clipboard&&navigator.clipboard.writeText('git clone '+${JSON.stringify(x.clone)});return true">Clone-Link</a></div></div>`}
 let d=x.description||x.command||(x.types||[]).join(", ")||"";if(c=="md")d=x.description||x.kind;
 return `<div class="it"><div class="t">${esc(t)}${x.kind&&c=="md"?`<span class=tag>${esc(x.kind)}</span>`:""}${x.types&&c=="projects"?`<span class=tag>${esc(x.types.join(" · "))}</span>`:""}</div><div class="p">${esc(x.path||x.source)}</div>${d&&c!="projects"?`<div class=d>${esc(d)}</div>`:(x.description?`<div class=d>${esc(x.description)}</div>`:"")}</div>`}
-function draw(){const q=document.getElementById("q").value.toLowerCase();
-document.getElementById("tabs").innerHTML=cats.map(([k,n])=>{const c=D[k].filter(x=>!q||JSON.stringify(x).toLowerCase().includes(q)).length;return `<button class="${k==cur?"on":""}" onclick="cur='${k}';draw()">${n} (${c})</button>`}).join("");
-const items=D[cur].filter(x=>!q||JSON.stringify(x).toLowerCase().includes(q));
-document.getElementById("list").innerHTML=items.slice(0,2000).map(x=>row(cur,x)).join("")||"<p>Nichts gefunden.</p>"}
-document.getElementById("q").oninput=draw;draw();
+function draw(){if(!D){return}const q=$("q").value.toLowerCase();
+$("tabs").innerHTML=cats.map(([k,n])=>{const c=(D[k]||[]).filter(x=>!q||JSON.stringify(x).toLowerCase().includes(q)).length;return `<button class="${k==cur?"on":""}" onclick="cur='${k}';draw()">${n} (${c})</button>`}).join("");
+const items=(D[cur]||[]).filter(x=>!q||JSON.stringify(x).toLowerCase().includes(q));
+$("list").innerHTML=items.slice(0,2000).map(x=>row(cur,x)).join("")||"<p>Nichts gefunden.</p>"}
+function showResult(){$("prog").classList.add("hide");$("q").classList.remove("hide");$("tabs").classList.remove("hide");
+$("meta").textContent=(D.meta?D.meta.scanned+" · "+D.meta.roots.join(", "):"");draw()}
+$("dl").onclick=function(){if(SERVE){location.href="/bericht.json";return}
+const blob=new Blob([JSON.stringify(D,null,1)],{type:"application/json"});const a=document.createElement("a");
+a.href=URL.createObjectURL(blob);a.download="bericht.json";a.click();URL.revokeObjectURL(a.href)};
+$("q").oninput=draw;
+if(SERVE){
+  $("prog").classList.remove("hide");$("q").classList.add("hide");$("tabs").classList.add("hide");$("stop").classList.remove("hide");
+  $("dl").textContent="Als JSON speichern (nach dem Scan)";
+  $("stop").onclick=function(){fetch("/api/shutdown",{method:"POST"}).catch(()=>{});$("prog").innerHTML="<h2>Beendet. Das Fenster kann geschlossen werden.</h2>"};
+  const poll=()=>fetch("/api/status").then(r=>r.json()).then(s=>{
+    if(s.error){$("pline").textContent="Fehler: "+s.error}
+    else{$("pline").textContent=s.count+" Ordner durchsucht · "+s.elapsed+" s"+(s.phase=="write"?" · schreibe Bericht …":"");$("pcur").textContent=s.current||""}
+    if(s.done){fetch("/api/result").then(r=>r.json()).then(j=>{D=j;$("dl").textContent="Als JSON speichern";showResult()})}
+    else{setTimeout(poll,700)}
+  }).catch(()=>setTimeout(poll,1200));
+  poll();
+}else{showResult()}
 </script></body></html>"""
 
 
@@ -442,8 +571,17 @@ def main():
                     help="Zusätzlich GitHub nach Skills/Agenten/MCP/Tools durchsuchen (mit Download-Links)")
     ap.add_argument("--github-token", default=None,
                     help="GitHub-Token für mehr Anfragen (sonst GITHUB_TOKEN-Umgebungsvariable)")
+    ap.add_argument("--serve", action="store_true",
+                    help="Im Hintergrund laufen und den Fortschritt live im Browser anzeigen")
+    ap.add_argument("--port", type=int, default=0, help="Fester Port für --serve (Standard: frei wählen)")
     a = ap.parse_args()
     roots = [Path(r) for r in a.roots] or [Path.home()]
+
+    if a.serve:
+        serve_report(roots, Path(a.out), with_github=a.github, github_token=a.github_token,
+                     port=a.port, open_browser=not a.no_open)
+        return
+
     print("MRPG PC-Scanner – scanne:", ", ".join(map(str, roots)))
     res = scan(roots, with_github=a.github, github_token=a.github_token)
     report = write_reports(res, Path(a.out), roots)

@@ -5,16 +5,41 @@ KI-Werkzeugen und Projekten installiert ist.
 
 ## Starten
 
-**Windows:** `scan-starten.bat` doppelklicken (Python muss installiert sein).
+**Windows (empfohlen, läuft im Hintergrund ohne Fenster):**
+`scan-hintergrund.vbs` doppelklicken. Der Scanner läuft unsichtbar im
+Hintergrund, der Browser öffnet sich und zeigt den Fortschritt live.
+Alternativ `scan-starten.bat` (startet minimiert).
 
-**Terminal:**
+**Linux/Mac:** `./scan-starten.sh` – läuft im Hintergrund, das Terminal kann
+danach geschlossen werden.
+
+**Terminal (klassisch, mit Textausgabe):**
 
 ```
 python pc_scanner.py              # nur das Benutzerverzeichnis
 python pc_scanner.py C:\ D:\      # ganze Laufwerke
 python pc_scanner.py --github     # zusätzlich GitHub durchsuchen
+python pc_scanner.py --serve      # Hintergrund + Live-Fortschritt im Browser
 python pc_scanner.py --out bericht --no-open
 ```
+
+## Hintergrund-Modus & Live-Fortschritt (`--serve`)
+
+Mit `--serve` startet der Scanner einen kleinen lokalen Webserver (nur auf
+deinem PC, `127.0.0.1`), öffnet den Browser und zeigt **live**, wie viele
+Ordner schon durchsucht wurden und welcher gerade dran ist. Das Terminal wird
+nicht gebraucht – über die mitgelieferten Starter läuft alles im Hintergrund.
+
+Wenn der Scan fertig ist, erscheinen die Ergebnisse mit allen Reitern.
+
+## Ergebnis speichern und weitergeben
+
+Oben im Bericht gibt es den Knopf **„Als JSON speichern"**. Damit lädst du das
+komplette Ergebnis als `bericht.json` herunter. Diese Datei kannst du dann
+weitergeben (z. B. an Claude), damit das Ergebnis ausgewertet werden kann.
+
+Im `--serve`-Modus beendest du den Scanner mit dem Knopf **„Beenden"** im
+Browser (oder indem du das Hintergrundfenster schließt).
 
 ## GitHub-Suche (`--github`)
 
@@ -79,4 +104,11 @@ Im Ausgabeordner (Standard `pc-scan-bericht/`):
 
 - `bericht.html` – öffnet sich im Browser, mit Suchfeld und Reitern.
 - `alle_md.md` – alle Markdown-Dateien in einer Datei.
-- `bericht.json` – die Rohdaten.
+- `bericht.json` – die Rohdaten (auch direkt per Knopf im Bericht speicherbar).
+
+## Dateien
+
+- `pc_scanner.py` – das Programm.
+- `scan-hintergrund.vbs` – Windows, komplett unsichtbarer Hintergrundstart.
+- `scan-starten.bat` – Windows, minimierter Start.
+- `scan-starten.sh` – Linux/Mac, Hintergrundstart.

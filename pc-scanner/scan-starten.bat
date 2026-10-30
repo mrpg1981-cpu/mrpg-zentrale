@@ -1,3 +1,3 @@
 @echo off
-python "%~dp0pc_scanner.py" %*
-pause
+start "" /min pythonw "%~dp0pc_scanner.py" --serve
+exit
