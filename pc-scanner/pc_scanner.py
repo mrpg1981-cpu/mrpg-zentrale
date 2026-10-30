@@ -499,33 +499,43 @@ def serve_report(roots, outdir, with_github=False, github_token=None, port=0, op
 
 
 HTML = r"""<!doctype html><html lang="de"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>MRPG PC-Scan</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>〄 MRPG PC-Scan</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2324272d'/%3E%3Ctext x='16' y='23' font-size='20' text-anchor='middle' fill='%2367f5ff' font-family='monospace'%3E%E3%80%84%3C/text%3E%3C/svg%3E">
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--fg:#1b1f24;--mut:#667;--acc:#2563eb;--bd:#dde}
-@media(prefers-color-scheme:dark){:root{--bg:#111418;--card:#1b2027;--fg:#e6e8eb;--mut:#99a;--acc:#60a5fa;--bd:#2c333d}}
+/* MRPG-Design (mrpg.dev): dunkles Slate, Cyan-Akzent, Monospace-Marke */
+:root{--bg:#2b2f36;--card:#24272d;--panel:#383c44;--fg:#f2f5f7;--mut:#b9bec7;--acc:#67f5ff;--bd:#59616d}
 body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--fg)}
-header{padding:16px;position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--bd)}
-h1{margin:0 0 8px;font-size:20px}input{width:100%;box-sizing:border-box;padding:10px;font-size:15px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg)}
-nav{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}nav button{border:1px solid var(--bd);background:var(--card);color:var(--fg);padding:6px 10px;border-radius:999px;cursor:pointer}
-nav button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+header{padding:16px;position:sticky;top:0;background:#24272d;border-bottom:1px solid var(--bd);z-index:10}
+h1{margin:0 0 8px;font-size:20px;display:flex;align-items:center;gap:10px}
+.brand{color:var(--acc);font:bold 18px/1 monospace}
+input{width:100%;box-sizing:border-box;padding:10px;font-size:15px;border:1px solid var(--bd);border-radius:8px;background:var(--panel);color:var(--fg)}
+input::placeholder{color:var(--mut)}
+input:focus{outline:0;border-color:var(--acc)}
+nav{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}nav button{border:1px solid var(--bd);background:var(--panel);color:var(--mut);padding:6px 10px;border-radius:999px;cursor:pointer;font-family:monospace}
+nav button:hover{color:var(--acc);border-color:var(--acc)}
+nav button.on{background:var(--acc);color:#111;border-color:var(--acc);font-weight:bold}
 main{padding:16px;max-width:1100px;margin:auto}.it{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;margin:6px 0}
-.t{font-weight:600}.p{color:var(--mut);font-size:12px;word-break:break-all}.d{margin-top:4px}.tag{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--bd);margin-left:6px}
-.lnk{display:inline-block;margin:6px 8px 0 0;padding:4px 10px;border-radius:6px;background:var(--acc);color:#fff;text-decoration:none;font-size:12px}
-.lnk.alt{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+.it:hover{border-color:var(--acc)}
+.t{font-weight:600}.p{color:var(--mut);font-size:12px;word-break:break-all;font-family:monospace}.d{margin-top:4px}.tag{font-size:11px;padding:1px 6px;border-radius:4px;background:#67f5ff22;color:var(--acc);margin-left:6px;font-family:monospace}
+.lnk{display:inline-block;margin:6px 8px 0 0;padding:4px 10px;border-radius:6px;background:var(--acc);color:#111;text-decoration:none;font-size:12px;font-weight:bold}
+.lnk.alt{background:transparent;color:var(--acc);border:1px solid var(--acc);font-weight:normal}
 .bar{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
-.btn{border:0;background:var(--acc);color:#fff;padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px}
-.btn.alt{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+.btn{border:0;background:var(--acc);color:#111;padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold}
+.btn.alt{background:var(--panel);color:var(--fg);border:1px solid var(--bd)}
+.btn.alt:hover{border-color:var(--acc);color:var(--acc)}
 #prog{max-width:1100px;margin:16px auto;padding:16px;background:var(--card);border:1px solid var(--bd);border-radius:10px}
-#prog h2{margin:0 0 10px;font-size:16px}
-.track{height:12px;border-radius:999px;background:var(--bd);overflow:hidden;margin:10px 0}
+#prog h2{margin:0 0 10px;font-size:16px;color:var(--acc);font-family:monospace}
+.track{height:12px;border-radius:999px;background:var(--panel);overflow:hidden;margin:10px 0}
 .fill{height:100%;width:30%;border-radius:999px;background:var(--acc);animation:slide 1.3s ease-in-out infinite}
 @keyframes slide{0%{margin-left:-30%}100%{margin-left:100%}}
 .hide{display:none}
-</style></head><body><header><h1>MRPG PC-Scan <span class="p" id="meta"></span></h1>
+footer{max-width:1100px;margin:0 auto;padding:10px 16px;color:var(--mut);font:11px monospace;border-top:1px solid var(--bd)}
+</style></head><body><header><h1><span class="brand">〄 MRPG</span> PC-Scan <span class="p" id="meta"></span></h1>
 <div class="bar" id="toolbar"><button class="btn" id="dl">Als JSON speichern</button><button class="btn alt hide" id="stop">Beenden</button></div>
 <input id="q" placeholder="Suchen in Namen, Pfaden, Beschreibungen und MD-Inhalten …"><nav id="tabs"></nav></header>
 <section id="prog" class="hide"><h2>Durchsuche den PC …</h2><div id="pline" class="p"></div><div class="track"><div class="fill"></div></div><div id="pcur" class="p"></div></section>
 <main id="list"></main>
+<footer>MRPG · LOCAL-FIRST · mrpg.dev</footer>
 <script>
 let D=__DATA__;const SERVE=__SERVE__;
 const cats=[["projects","Projekte"],["mcp","MCP-Server"],["agents","Agenten"],["skills","Skills"],["commands","Commands"],["plugins","Plugins"],["tools","Tools/CLIs"],["rules","Regeln (CLAUDE.md …)"],["access","Zugänge"],["github","GitHub (zum Download)"],["md","Alle MD"]];
