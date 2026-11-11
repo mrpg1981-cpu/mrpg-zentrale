@@ -1,0 +1,136 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>〄 MrPG Folder Organizer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2324272d'/%3E%3Ctext x='16' y='23' font-size='20' text-anchor='middle' fill='%2367f5ff' font-family='monospace'%3E%E3%80%84%3C/text%3E%3C/svg%3E">
+<style>
+:root{--bg:#2b2f36;--card:#24272d;--panel:#383c44;--fg:#f2f5f7;--mut:#b9bec7;--acc:#67f5ff;--bd:#59616d;--ok:#5be39a;--warn:#ffcc66;--bad:#ff7a7a;--onacc:#111}
+:root[data-theme=light]{--bg:#f2f4f7;--card:#ffffff;--panel:#e6e9ee;--fg:#1d2127;--mut:#5b6370;--acc:#0a8ea0;--bd:#c8ced6;--ok:#178a4c;--warn:#a86d00;--bad:#c23030;--onacc:#fff}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+header{padding:12px 16px;position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--bd);z-index:10}
+.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}h1{margin:0;font-size:18px;flex:1}.brand{color:var(--acc);font:bold 18px monospace}
+nav{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+button,.btn{border:1px solid var(--bd);background:var(--panel);color:var(--fg);padding:7px 12px;border-radius:8px;cursor:pointer;font:inherit}
+button:hover{border-color:var(--acc)}button.pri{background:var(--acc);color:var(--onacc);border-color:var(--acc);font-weight:600}
+button:disabled{opacity:.5;cursor:default}
+nav button{border-radius:999px;font-family:monospace;color:var(--mut)}nav button.on{background:var(--acc);color:var(--onacc);border-color:var(--acc);font-weight:bold}
+main{padding:16px;max-width:1150px;margin:auto}section{display:none}section.on{display:block}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin:10px 0}
+input[type=text],input[type=number],select,textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--panel);color:var(--fg);font:inherit}
+input:focus,textarea:focus{outline:0;border-color:var(--acc)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>.grow{flex:1;min-width:200px}
+.opts label{display:inline-flex;gap:6px;align-items:center;margin:4px 14px 4px 0}
+.mut{color:var(--mut)}.mono{font-family:monospace;word-break:break-all;font-size:12px}
+.tag{font:11px monospace;padding:2px 7px;border-radius:5px;background:color-mix(in srgb,var(--acc) 18%,transparent);color:var(--acc)}
+.tag.duplikat{color:var(--warn);background:color-mix(in srgb,var(--warn) 18%,transparent)}.tag.leer{color:var(--mut)}
+.tag.assistent{color:var(--ok);background:color-mix(in srgb,var(--ok) 18%,transparent)}
+.act{display:grid;grid-template-columns:24px 1fr;gap:8px;padding:8px 0;border-top:1px solid var(--bd)}
+.act.off{opacity:.45}.act input[type=text]{font:12px monospace;padding:5px 8px;margin-top:4px}
+.stats{display:flex;gap:10px;flex-wrap:wrap}.stat{background:var(--panel);border-radius:8px;padding:8px 12px}.stat b{display:block;font-size:18px;color:var(--acc)}
+.bar{height:6px;background:var(--panel);border-radius:3px;overflow:hidden;margin-top:8px}.bar i{display:block;height:100%;width:40%;background:var(--acc);animation:mv 1.2s infinite linear}
+@keyframes mv{from{margin-left:-40%}to{margin-left:100%}}
+.err{color:var(--bad)}.okc{color:var(--ok)}.dirs{max-height:300px;overflow:auto}.dirs div{padding:4px 6px;cursor:pointer;border-radius:5px}.dirs div:hover{background:var(--panel)}
+table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:6px;border-top:1px solid var(--bd);vertical-align:top}
+a{color:var(--acc)}.pill{font:11px monospace;margin-left:6px}
+</style></head><body>
+<header><div class="top"><span class="brand">〄 MRPG</span><h1>Folder Organizer <span class="mut mono" id="ver"></span></h1>
+<span id="tools" class="mono mut"></span><button id="theme" title="Hell/Dunkel">◐</button></div>
+<nav id="nav"></nav></header>
+<main>
+<section id="s-scan">
+ <div class="card"><b>1. Ordner wählen</b>
+  <div class="row" style="margin-top:8px"><input class="grow" type="text" id="root" placeholder="z. B. C:\Users\Name\Downloads"><button onclick="openBrowse()">Durchsuchen …</button></div>
+  <div id="browse" class="card" style="display:none"><div class="row"><span class="mono grow" id="bpath"></span><button onclick="pick()" class="pri">Diesen Ordner nehmen</button><button onclick="byId('browse').style.display='none'">✕</button></div><div class="dirs" id="bdirs"></div></div>
+  <div class="opts" style="margin-top:8px">
+   <label><input type="checkbox" id="o-duplicates" checked>Duplikate</label>
+   <label><input type="checkbox" id="o-similar" checked>Ähnliche Bilder/Videos</label>
+   <label><input type="checkbox" id="o-empty" checked>Leere Ordner</label>
+   <label><input type="checkbox" id="o-rules" checked>Sortierregeln</label>
+   <label><input type="checkbox" id="o-content" checked>Dokumentinhalte lesen</label>
+   <label><input type="checkbox" id="o-projects" checked>Sortierassistent (Projekte)</label>
+   <label><input type="checkbox" id="o-index" checked>Suchassistent vorbereiten</label></div>
+  <div class="row"><button class="pri" id="bscan" onclick="startScan()">Scannen (ändert nichts)</button><span class="mut">Der Scan liest nur. Erst „Ausführen“ verschiebt Dateien.</span></div>
+  <div id="job"></div></div>
+ <div id="summary"></div>
+ <div class="card" id="plancard" style="display:none"><div class="row"><b class="grow">2. Vorschläge prüfen</b>
+   <select id="filter" style="width:auto" onchange="renderPlan()"><option value="">Alle</option><option value="duplikat">Duplikate</option><option value="regel">Regeln</option><option value="assistent">Sortierassistent</option><option value="leer">Leere Ordner</option></select>
+   <button onclick="setAll(true)">Alle an</button><button onclick="setAll(false)">Alle aus</button></div>
+  <p class="mut">Zielpfade können direkt bearbeitet werden. Duplikate wandern in <span class="mono">_MrPG-Papierkorb</span>, nichts wird gelöscht oder überschrieben.</p>
+  <div id="plan"></div>
+  <div class="row" style="margin-top:12px"><button class="pri" onclick="execute()">3. Ausführen</button><span class="mut" id="pcount"></span></div></div>
+</section>
+<section id="s-dups"><div class="card"><b>Exakte Duplikate</b><p class="mut">Inhalt Byte für Byte identisch (SHA-256). Die älteste Datei bleibt, die übrigen sind im Plan als „Duplikat“ eingetragen.</p><div id="dups"></div></div></section>
+<section id="s-similar"><div class="card"><b>Ähnliche Bilder und Videos</b><p class="mut">Sehen ähnlich aus, sind aber nicht identisch (z. B. andere Größe oder Qualität). Diese werden nicht automatisch verschoben – nur zur Ansicht.</p><div id="similar"></div></div></section>
+<section id="s-search"><div class="card"><b>Suchassistent</b><div class="row" style="margin-top:8px"><input class="grow" type="text" id="q" placeholder="z. B. Rechnung Stromanbieter 2024" onkeydown="if(event.key==='Enter')doSearch()"><button class="pri" onclick="doSearch()">Suchen</button></div><p class="mut" id="smode"></p><div id="sres"></div></div></section>
+<section id="s-rules"><div class="card"><div class="row"><b class="grow">Sortierregeln</b><button onclick="addRule()">+ Regel</button><button onclick="resetRules()">Standard</button><button class="pri" onclick="saveRules()">Speichern</button></div>
+ <p class="mut">Die erste passende Regel gilt. Platzhalter: <span class="mono">{year} {month} {day} {date} {name} {ext} {category} {project}</span>. Ziel relativ zum gescannten Ordner oder absolut.</p><div id="rules"></div></div></section>
+<section id="s-history"><div class="card"><b>Verlauf und Rücknahme</b><p class="mut">Jeder Vorgang ist protokolliert und kann – auch nach einem Neustart – zurückgenommen werden.</p><div id="hist"></div></div></section>
+<section id="s-settings"><div class="card"><b>Projekte für den Sortierassistenten</b>
+ <p class="mut">Projektordner: jeder Unterordner gilt als Projekt.</p><input type="text" id="proot" placeholder="z. B. D:\Projekte">
+ <p class="mut">Weitere Projekte (eine Zeile je Projekt: <span class="mono">Name | Zielordner | Stichworte</span>)</p><textarea id="plist" rows="5"></textarea>
+ <div class="opts"><label><input type="checkbox" id="s-assist">Assistenten verwenden (sonst Stichwortverfahren)</label><label><input type="checkbox" id="s-ocr">Texterkennung (OCR) für Bilder und gescannte PDFs</label></div>
+ <label class="mut">Toleranz ähnliche Medien (0 = streng, 16 = locker) <input type="number" id="s-thr" min="0" max="20" style="width:80px"></label>
+ <div class="row" style="margin-top:10px"><button class="pri" onclick="saveSettings()">Speichern</button><span id="sset" class="okc"></span></div>
+ <p class="mut mono" id="sdata"></p></div></section>
+</main>
+<script>
+const byId=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(p,b){const r=await fetch(p,b===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
+const fmt=n=>n>1e9?(n/1e9).toFixed(1)+' GB':n>1e6?(n/1e6).toFixed(1)+' MB':n>1e3?(n/1e3).toFixed(0)+' KB':n+' B';
+const TABS=[['scan','Aufräumen'],['dups','Duplikate'],['similar','Ähnliche Medien'],['search','Suche'],['rules','Regeln'],['history','Verlauf'],['settings','Einstellungen']];
+function tab(t){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id==='s-'+t));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+ if(t==='history')loadHist();if(t==='rules')loadRules();if(t==='settings')loadSettings();try{localStorage.setItem('fo-tab',t)}catch(e){}}
+byId('nav').innerHTML=TABS.map(([k,v])=>`<button data-t="${k}" onclick="tab('${k}')">${v}</button>`).join('');
+function theme(t){document.documentElement.dataset.theme=t;try{localStorage.setItem('fo-theme',t)}catch(e){}}
+byId('theme').onclick=()=>theme(document.documentElement.dataset.theme==='light'?'dark':'light');
+try{theme(localStorage.getItem('fo-theme')||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'));byId('root').value=localStorage.getItem('fo-root')||''}catch(e){}
+let R=null,polling=false;
+async function status(){const s=await api('/api/status');byId('ver').textContent='v'+s.version;
+ const t=s.tools,m=(k,l)=>`<span class="pill" style="color:var(${t[k]?'--ok':'--mut'})">${t[k]?'●':'○'} ${l}</span>`;
+ byId('tools').innerHTML=m('ffmpeg','Medien')+m('ocr','OCR')+m('sortierassistent','Sortierassistent')+m('suchassistent','Suchassistent');byId('sdata').textContent='Daten: '+s.data;return s}
+async function poll(){if(polling)return;polling=true;try{for(;;){const s=await status(),j=s.job;
+ byId('job').innerHTML=j.running?`<p>${esc(j.step)}</p><div class="bar"><i></i></div>`:j.error?`<p class="err">Fehler: ${esc(j.error)}</p>`:'';
+ byId('bscan').disabled=j.running;
+ if(!j.running){if(j.kind==='execute'&&j.last){const l=j.last;byId('job').innerHTML=`<p class="okc">${l.done} Aktionen ausgeführt. Rücknahme im Verlauf möglich.</p>`+(l.skipped.length?`<p class="err">${l.skipped.length} übersprungen:</p>`+l.skipped.map(x=>`<div class="mono">${esc(x.src)} – ${esc(x.why)}</div>`).join(''):'');R=null;render()}
+  else if(s.has_result)await loadResult();break}
+ await new Promise(r=>setTimeout(r,700))}}finally{polling=false}}
+async function startScan(){const root=byId('root').value.trim();try{localStorage.setItem('fo-root',root)}catch(e){}
+ const options={};['duplicates','similar','empty','rules','content','projects','index'].forEach(k=>options[k]=byId('o-'+k).checked);
+ try{await api('/api/scan',{root,options});poll()}catch(e){byId('job').innerHTML=`<p class="err">${esc(e.message)}</p>`}}
+async function loadResult(){R=await api('/api/result');render()}
+function rel(p){return R&&p.startsWith(R.root)?p.slice(R.root.length+1):p}
+function render(){if(!R||!R.plan){byId('summary').innerHTML='';byId('plancard').style.display='none';byId('dups').innerHTML='';byId('similar').innerHTML='';return}
+ const save=R.duplicates.reduce((a,g)=>a+g.size*(g.files.length-1),0);
+ byId('summary').innerHTML=`<div class="card stats"><div class="stat"><b>${R.files}</b>Dateien</div><div class="stat"><b>${fmt(R.bytes)}</b>gesamt</div><div class="stat"><b>${R.duplicates.length}</b>Duplikat-Gruppen</div><div class="stat"><b>${fmt(save)}</b>frei durch Duplikate</div><div class="stat"><b>${R.similar.length}</b>ähnliche Medien</div><div class="stat"><b>${R.empty.length}</b>leere Ordner</div><div class="stat"><b>${Object.keys(R.projects).length}</b>Projektvorschläge</div></div>`;
+ byId('plancard').style.display='';renderPlan();
+ byId('dups').innerHTML=R.duplicates.length?R.duplicates.map(g=>`<div class="card"><b>${fmt(g.size)}</b> × ${g.files.length}`+g.files.map(f=>`<div class="mono">${f===g.keep?'<span class="tag">bleibt</span> ':'<span class="tag duplikat">Kopie</span> '}<a href="#" onclick="reveal(this.dataset.p);return false" data-p="${esc(f)}">${esc(rel(f))}</a></div>`).join('')+'</div>').join(''):'<p class="mut">Keine Duplikate gefunden.</p>';
+ byId('similar').innerHTML=R.similar.length?R.similar.map(g=>'<div class="card">'+g.files.map(f=>`<div class="mono"><a href="#" onclick="reveal(this.dataset.p);return false" data-p="${esc(f)}">${esc(rel(f))}</a></div>`).join('')+'</div>').join(''):'<p class="mut">Keine ähnlichen Medien gefunden (oder Medienprüfung aus).</p>'}
+function renderPlan(){const f=byId('filter').value,list=R.plan.filter(a=>!f||a.source===f);
+ byId('plan').innerHTML=list.length?list.slice(0,2000).map(a=>`<div class="act ${a.enabled?'':'off'}"><input type="checkbox" ${a.enabled?'checked':''} onchange="upd('${a.id}',{enabled:this.checked})"><div><span class="tag ${a.source}">${esc(a.source)}</span> <span class="mut">${esc(a.reason)}</span><div class="mono">${esc(rel(a.src))}</div>`+(a.kind==='move'?`<input type="text" value="${esc(rel(a.dst))}" onchange="upd('${a.id}',{dst:this.value})">`:`<div class="mono mut">→ Ordner entfernen</div>`)+'</div></div>').join('')+(list.length>2000?`<p class="mut">… und ${list.length-2000} weitere</p>`:''):'<p class="mut">Keine Vorschläge – alles ordentlich.</p>';
+ byId('pcount').textContent=R.plan.filter(a=>a.enabled).length+' von '+R.plan.length+' Aktionen aktiv'}
+async function upd(id,ch){const a=R.plan.find(x=>x.id===id);await api('/api/plan/update',{id,...ch});if('enabled' in ch)a.enabled=ch.enabled;if(ch.dst)a.dst=ch.dst.match(/^([a-zA-Z]:|\/)/)?ch.dst:R.root+(R.root.includes('\\')?'\\':'/')+ch.dst;renderPlan()}
+async function setAll(v){const f=byId('filter').value,ids=R.plan.filter(a=>!f||a.source===f).map(a=>a.id);await api('/api/plan/update',{ids,enabled:v});R.plan.forEach(a=>{if(ids.includes(a.id))a.enabled=v});renderPlan()}
+async function execute(){const n=R.plan.filter(a=>a.enabled).length;if(!n||!confirm(n+' Aktionen ausführen? Alles kann im Verlauf zurückgenommen werden.'))return;
+ try{await api('/api/execute',{});poll()}catch(e){alert(e.message)}}
+async function reveal(p){try{await api('/api/reveal',{path:p})}catch(e){alert(e.message)}}
+async function openBrowse(p){const b=await api('/api/browse?path='+encodeURIComponent(p??byId('root').value));byId('browse').style.display='';byId('bpath').textContent=b.path||'Laufwerke';byId('bpath').dataset.p=b.path;
+ byId('bdirs').innerHTML=(b.parent?`<div data-p="${esc(b.parent)}">⬆ ..</div>`:'')+b.dirs.map(d=>`<div data-p="${esc(d)}">📁 ${esc(d.split(/[\\/]/).filter(Boolean).pop()||d)}</div>`).join('');
+ byId('bdirs').querySelectorAll('div').forEach(x=>x.onclick=()=>openBrowse(x.dataset.p))}
+function pick(){const p=byId('bpath').dataset.p;if(p){byId('root').value=p;byId('browse').style.display='none'}}
+async function doSearch(){const r=await api('/api/search',{query:byId('q').value});byId('smode').textContent=r.hint||(r.mode==='suchassistent'?'Suche nach Bedeutung mit dem Suchassistenten':'Stichwortsuche');
+ byId('sres').innerHTML=r.results.map(x=>`<div class="act" style="grid-template-columns:1fr"><div><a href="#" data-p="${esc(x.path)}" onclick="reveal(this.dataset.p);return false">${esc(x.rel)}</a> <span class="tag">${x.score}</span><div class="mut">${esc(x.snippet)}</div></div></div>`).join('')||'<p class="mut">Nichts gefunden.</p>'}
+let RULES=[];
+async function loadRules(){RULES=await api('/api/rules');drawRules()}
+function drawRules(){byId('rules').innerHTML='<table><tr><th></th><th>Name</th><th>Endungen</th><th>Name enthält (Muster)</th><th>Text enthält</th><th>Älter als Tage</th><th>Ziel</th><th>Umbenennen</th><th></th></tr>'+RULES.map((r,i)=>`<tr><td><input type="checkbox" ${r.enabled!==false?'checked':''} onchange="RULES[${i}].enabled=this.checked"></td>`+
+ [['name'],['ext',1],['name_glob'],['contains'],['older_than_days'],['target'],['rename']].map(([k,arr])=>`<td><input type="text" value="${esc(arr?(r[k]||[]).join(' '):r[k]??'')}" onchange="RULES[${i}]['${k}']=${arr?"this.value.split(/[ ,]+/).filter(Boolean)":'this.value'}"></td>`).join('')+
+ `<td><button onclick="mv(${i},-1)">↑</button><button onclick="RULES.splice(${i},1);drawRules()">✕</button></td></tr>`).join('')+'</table>'}
+function mv(i,d){const j=i+d;if(j<0||j>=RULES.length)return;[RULES[i],RULES[j]]=[RULES[j],RULES[i]];drawRules()}
+function addRule(){RULES.unshift({name:'Neue Regel',enabled:true,ext:[],target:'Sortiert/{category}',rename:''});drawRules()}
+async function saveRules(){await api('/api/rules',RULES);alert('Regeln gespeichert')}
+async function resetRules(){if(confirm('Standardregeln wiederherstellen?')){RULES=await api('/api/rules/reset',{});drawRules()}}
+async function loadSettings(){const s=await api('/api/settings');byId('proot').value=s.project_root||'';byId('plist').value=(s.projects||[]).map(p=>[p.name,p.folder||'',p.keywords||''].join(' | ')).join('\n');
+ byId('s-assist').checked=s.use_assistant!==false;byId('s-ocr').checked=!!s.ocr;byId('s-thr').value=s.similar_threshold??8}
+async function saveSettings(){const projects=byId('plist').value.split('\n').map(l=>l.split('|').map(x=>x.trim())).filter(x=>x[0]).map(([name,folder,keywords])=>({name,folder:folder||'',keywords:keywords||''}));
+ await api('/api/settings',{project_root:byId('proot').value.trim(),projects,use_assistant:byId('s-assist').checked,ocr:byId('s-ocr').checked,similar_threshold:+byId('s-thr').value||0});byId('sset').textContent='Gespeichert';setTimeout(()=>byId('sset').textContent='',2000)}
+async function loadHist(){const h=await api('/api/history');byId('hist').innerHTML=h.length?'<table><tr><th>Zeit</th><th>Ordner</th><th>Ausgeführt</th><th>Übersprungen</th><th></th></tr>'+h.map(b=>`<tr><td>${new Date(b.time*1000).toLocaleString('de-DE')}</td><td class="mono">${esc(b.root)}</td><td>${b.done}</td><td>${b.skipped}</td><td>${b.undone?'<span class="mut">zurückgenommen</span>':`<button onclick="undo('${b.id}')">Rücknahme</button>`}</td></tr>`).join('')+'</table>':'<p class="mut">Noch keine Vorgänge.</p>'}
+async function undo(id){if(!confirm('Diesen Vorgang zurücknehmen?'))return;const r=await api('/api/undo',{batch:id});alert(r.restored+' Aktionen zurückgenommen'+(r.problems.length?'\nProbleme:\n'+r.problems.join('\n'):''));loadHist()}
+let t0='scan';try{t0=localStorage.getItem('fo-tab')||'scan'}catch(e){}tab(t0);poll();
+</script></body></html>

@@ -1,0 +1,71 @@
+name: Folder Organizer bauen
+
+on:
+  push:
+    paths: ["folder-organizer/**", ".github/workflows/folder-organizer.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tests-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: sudo apt-get install -y ffmpeg && pip install pypdf Pillow
+      - run: python -m unittest -v folder-organizer/tests/test_organizer.py
+
+  windows-portabel:
+    needs: tests-linux
+    runs-on: windows-latest
+    defaults: { run: { shell: pwsh } }
+    env:
+      GH_TOKEN: ${{ github.token }}
+      APP: dist\MrPG-Folder-Organizer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Portablen Ordner bauen
+        run: ./folder-organizer/build/build_windows.ps1 -Out $env:APP
+      - name: Tests mit mitgelieferter Laufzeit
+        run: |
+          & "$env:APP\runtime\python\python.exe" "$env:APP\tests\test_organizer.py"
+          if ($LASTEXITCODE) { exit 1 }
+      - name: Umzugstest + Praxistest (Werkzeuge und Assistenten)
+        run: |
+          Move-Item $env:APP "C:\Umzug Test\MrPG-Folder-Organizer"
+          & "C:\Umzug Test\MrPG-Folder-Organizer\runtime\python\python.exe" folder-organizer\build\smoke.py "C:\Umzug Test\MrPG-Folder-Organizer"
+          if ($LASTEXITCODE) { exit 1 }
+          $p = Start-Process "C:\Umzug Test\MrPG-Folder-Organizer\runtime\python\python.exe" -ArgumentList '"C:\Umzug Test\MrPG-Folder-Organizer\app\main.py"','--no-browser','--port','8799' -PassThru
+          Start-Sleep 5
+          $r = Invoke-WebRequest http://127.0.0.1:8799/api/status -UseBasicParsing
+          Write-Host $r.Content
+          Stop-Process $p.Id
+          Move-Item "C:\Umzug Test\MrPG-Folder-Organizer" $env:APP
+      - name: ZIP erstellen
+        run: |
+          Remove-Item -Recurse -Force "$env:APP\daten" -ErrorAction SilentlyContinue
+          Get-ChildItem $env:APP -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force
+          cd dist
+          7z a -tzip -mx=7 MrPG-Folder-Organizer-Windows.zip MrPG-Folder-Organizer | Out-Null
+          7z t MrPG-Folder-Organizer-Windows.zip | Select-Object -Last 3
+          "{0:N0} MB" -f ((Get-Item MrPG-Folder-Organizer-Windows.zip).Length / 1MB)
+      - name: Download bereitstellen (GitHub Release)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: folder-organizer-v1.0.${{ github.run_number }}
+          name: MrPG Folder Organizer 1.0.${{ github.run_number }} (Windows, portabel)
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: dist/MrPG-Folder-Organizer-Windows.zip
+          body: |
+            **Eine ZIP – alles drin.** Python, FFmpeg, Texterkennung, Sortierassistent und Suchassistent.
+            Keine Installation, keine Adminrechte, keine weiteren Downloads.
+
+            1. `MrPG-Folder-Organizer-Windows.zip` unten unter *Assets* anklicken → landet im Ordner *Downloads*.
+            2. Rechtsklick → *Alle extrahieren …*
+            3. Im entpackten Ordner `Start.bat` doppelklicken.
+
+            Automatisch geprüft auf Windows: Funktionstests, Texterkennung, Medienvergleich, beide Assistenten, Ordner-Umzug.

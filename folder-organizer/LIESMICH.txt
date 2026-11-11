@@ -1,0 +1,48 @@
+〄 MrPG Folder Organizer
+=======================
+
+Ordnung in Ordnern – vollständig lokal und portabel. Nichts wird installiert,
+nichts verlässt deinen Rechner, alles kann zurückgenommen werden.
+
+START (Windows)
+  1. ZIP vollständig entpacken (Rechtsklick → "Alle extrahieren …").
+  2. Im entpackten Ordner "Start.bat" doppelklicken.
+  3. Der Browser öffnet sich mit der Oberfläche. Das schwarze Fenster offen lassen.
+
+  Der Ordner kann auf einen USB-Stick oder an einen anderen Ort verschoben werden.
+  Einstellungen, Regeln und das Protokoll liegen im Unterordner "daten".
+
+ABLAUF
+  1. Ordner wählen (oder "Demo-Ordner" zum Ausprobieren).
+  2. Scannen – der Scan ändert nichts.
+  3. Vorschläge prüfen: abwählen, Zielpfade direkt ändern.
+  4. Ausführen. Unter "Verlauf" kann jeder Vorgang zurückgenommen werden,
+     auch nach einem Neustart.
+
+FUNKTIONEN
+  • Exakte Duplikate (SHA-256). Die älteste Datei bleibt, Kopien wandern in
+    "_MrPG-Papierkorb" im gescannten Ordner. Es wird nie etwas gelöscht.
+  • Ähnliche Bilder und Videos (Bild-Fingerabdruck über FFmpeg) – nur Anzeige.
+  • Leere Ordner finden und entfernen.
+  • Sortierregeln: nach Endung, Namensmuster, Textinhalt, Alter; Ziel und
+    Umbenennung mit Platzhaltern {year} {month} {day} {date} {name} {ext}
+    {category} {project}.
+  • Dokumentinhalte lesen: TXT, PDF, Word, Excel, PowerPoint, OpenDocument.
+  • Texterkennung (OCR) für Bilder und gescannte PDFs (in Einstellungen an).
+  • Sortierassistent: ordnet Dateien deinen Projekten zu. Er wählt nur aus
+    deinen eingetragenen Projekten, nie ein erfundenes.
+  • Suchassistent: findet Dateien nach Bedeutung ("Strom Abrechnung" findet
+    auch "Stadtwerke Rechnung").
+
+SICHERHEIT
+  • Belegte Ziele werden nie überschrieben.
+  • Dateien, die seit dem Scan geändert wurden, werden übersprungen.
+  • Die Oberfläche läuft nur auf 127.0.0.1 (nicht im Netzwerk erreichbar).
+
+ENTHALTENE KOMPONENTEN (alles im Ordner, keine Downloads nötig)
+  runtime\python   Python (Windows embeddable) + pypdf, pypdfium2, Pillow
+  tools\ffmpeg     FFmpeg (LGPL)
+  tools\tesseract  Tesseract OCR (Apache 2.0) mit Deutsch/Englisch
+  tools\llama      llama.cpp (MIT)
+  assistenten\     Sortierassistent: Qwen2.5 0.5B Instruct (Apache 2.0)
+                   Suchassistent:    nomic-embed-text v1.5 (Apache 2.0)
