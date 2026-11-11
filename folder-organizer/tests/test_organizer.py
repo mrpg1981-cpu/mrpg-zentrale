@@ -30,7 +30,7 @@ def snapshot(root):
 
 class Base(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp())
+        self.root = Path(tempfile.mkdtemp()).resolve()
         for p in Path(_DATA).glob("**/*.json"):
             p.unlink()
 
