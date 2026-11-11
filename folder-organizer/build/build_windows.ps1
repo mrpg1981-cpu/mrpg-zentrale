@@ -54,10 +54,18 @@ Copy-Item (Get "https://github.com/tesseract-ocr/tessdata_fast/raw/main/deu.trai
 Copy-Item (Get "https://github.com/tesseract-ocr/tessdata_fast/raw/main/eng.traineddata" "eng.traineddata") "$Out\tools\tesseract\tessdata\" -Force
 
 # 5. llama.cpp (CPU-Version, läuft auf jedem x64-PC)
-gh release download --repo ggml-org/llama.cpp --pattern "llama-*-bin-win-cpu-x64.zip" -D $Dl --clobber
+$assets = (gh release view --repo ggml-org/llama.cpp --json assets | ConvertFrom-Json).assets.name
+Write-Host "llama.cpp-Assets: $($assets -join ', ')"
+$pick = $null
+foreach ($pat in '^llama-.*-bin-win-cpu-x64\.zip$', '^llama-.*-bin-win-avx2-x64\.zip$', '^llama-.*-bin-win-.*x64\.zip$') {
+  $pick = $assets | Where-Object { $_ -match $pat -and $_ -notmatch 'cuda|vulkan|sycl|hip|opencl|kompute|arm' } | Select-Object -First 1
+  if ($pick) { break }
+}
+if (-not $pick) { throw "Kein passendes llama.cpp-Paket gefunden" }
+Write-Host "Nehme $pick"
+gh release download --repo ggml-org/llama.cpp --pattern $pick -D $Dl --clobber
 if ($LASTEXITCODE) { throw "llama.cpp-Download fehlgeschlagen" }
-$lz = Get-ChildItem "$Dl\llama-*-bin-win-cpu-x64.zip" | Select-Object -First 1
-Expand-Archive $lz.FullName "$Dl\llama" -Force
+Expand-Archive (Join-Path $Dl $pick) "$Dl\llama" -Force
 $srv = Get-ChildItem "$Dl\llama" -Recurse -Filter llama-server.exe | Select-Object -First 1
 New-Item -ItemType Directory -Force "$Out\tools\llama" | Out-Null
 Copy-Item $srv.FullName "$Out\tools\llama\"
