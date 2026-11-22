@@ -120,8 +120,8 @@ Invoke-Check 'Navigationsbereich' {
 Invoke-Check 'Verbindung' {
     foreach ($h in 'outlook.office365.com','autodiscover-s.outlook.com') {
         $t = Test-NetConnection $h -Port 443 -WarningAction SilentlyContinue
-        if ($t.TcpTestSucceeded) { Add-Result 'Verbindung' 'OK' "$h:443 erreichbar." }
-        else { Add-Result 'Verbindung' 'Fehler' "$h:443 nicht erreichbar." 'Netzwerk/Proxy/Firewall pruefen, DNS-Cache leeren' }
+        if ($t.TcpTestSucceeded) { Add-Result 'Verbindung' 'OK' "${h}:443 erreichbar." }
+        else { Add-Result 'Verbindung' 'Fehler' "${h}:443 nicht erreichbar." 'Netzwerk/Proxy/Firewall pruefen, DNS-Cache leeren' }
     }
     $proxy = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').ProxyEnable
     if ($proxy -eq 1) { Add-Result 'Verbindung' 'Info' 'Proxy ist aktiv.' }
